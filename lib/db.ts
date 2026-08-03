@@ -2,19 +2,21 @@ import "server-only";
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
+import { applyPendingRestore } from "./backup-core";
 
 declare global {
   var __rehabCrmDb: DatabaseSync | undefined;
 }
 
 export function dataDirectory() {
-  return process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(process.cwd(), "data");
+  return process.env.DATA_DIR ? path.resolve(/*turbopackIgnore: true*/ process.env.DATA_DIR) : path.join(process.cwd(), "data");
 }
 
 export function getDb() {
   if (global.__rehabCrmDb) return global.__rehabCrmDb;
   const dir = dataDirectory();
   mkdirSync(dir, { recursive: true });
+  applyPendingRestore(dir);
   mkdirSync(path.join(dir, "uploads"), { recursive: true });
   const db = new DatabaseSync(path.join(dir, "rehabintl-crm.sqlite"));
   db.exec("PRAGMA journal_mode=WAL");

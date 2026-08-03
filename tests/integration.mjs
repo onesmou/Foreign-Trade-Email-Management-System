@@ -47,6 +47,15 @@ try {
   assert.equal(result.body.imported, 1);
   assert.equal(result.body.files[0].category, "产品资料");
 
+  result = await request("/api/backups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ passphrase: "IntegrationBackup2026!" }) });
+  assert.equal(result.response.status, 200, JSON.stringify(result.body));
+  const backupId = result.body.backup.id;
+  result = await request("/api/backups");
+  assert.equal(result.body.backups.length, 1);
+  const download = await fetch(`${app}/api/backups/download?id=${encodeURIComponent(backupId)}`, { headers: { Cookie: cookie } });
+  assert.equal(download.status, 200);
+  assert.equal(Buffer.from(await download.arrayBuffer()).subarray(0, 9).toString("ascii"), "RICRMBAK1");
+
   for (const apiStyle of ["chat", "responses"]) {
     result = await request("/api/ai/test", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: `Mock ${apiStyle}`, providerKey: "custom", apiStyle, baseUrl: "http://127.0.0.1:3210/v1", model: "mock-model" }) });
     assert.equal(result.response.status, 200, JSON.stringify(result.body));
@@ -57,7 +66,7 @@ try {
   assert.equal(result.response.status, 400);
   assert.match(result.body.error, /至少需要一个启用的管理员/);
 
-  console.log("Integration OK: setup/auth, raw-email parse, inquiry create, knowledge import, chat/responses AI tests, last-admin protection.");
+  console.log("Integration OK: setup/auth, raw-email parse, inquiry create, knowledge import, encrypted backup/download, chat/responses AI tests, last-admin protection.");
 } finally {
   await new Promise((resolve) => mock.close(resolve));
 }

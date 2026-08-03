@@ -1,6 +1,6 @@
 {
   "name": "rehabintl-inquiry-crm",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
@@ -11,7 +11,9 @@
     "start": "next start -H 0.0.0.0",
     "test": "npm run build && node --test tests/*.test.mjs",
     "lint": "eslint . --ignore-pattern .next",
-    "start:bt": "next start -H 127.0.0.1"
+    "start:bt": "next start -H 127.0.0.1",
+    "backup": "node --experimental-strip-types scripts/backup.mjs",
+    "restore": "node --experimental-strip-types scripts/restore.mjs"
   },
   "dependencies": {
     "adm-zip": "0.6.0",
