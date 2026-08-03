@@ -30,13 +30,21 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
 
 # typescript
 next-env.d.ts
+*.tsbuildinfo
 /dist/
 /.wrangler/
 /outputs/
 /work/
+
+# self-hosted runtime data
+/data/*
+!/data/.gitkeep
+/release/
+/.npm-cache/

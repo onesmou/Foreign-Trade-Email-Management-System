@@ -1,130 +1,55 @@
-import { env } from "cloudflare:workers";
-import { ensureDatabase } from "../../../db/ensure";
+import { assertSameOrigin, requireApiUser } from "../../../lib/auth";
+import { activeProvider, callModel, extractJson } from "../../../lib/ai";
+import { audit, getDb } from "../../../lib/db";
+import { retrieveKnowledge } from "../../../lib/knowledge";
 
-export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
-const productContext = [
-  "Seated Trunk Stability Trainer", "Seated Hip Trainer", "Seated Quadriceps Trainer",
-  "Adult Suspension Rehabilitation System", "Body Weight Support Gait Trainer",
-  "Elephant-Arm Body Weight Support Trainer", "Parallel Bars with Accessories",
-  "Two-Sided Training Stairs", "Foldable Four-Wheel Walking Aid",
-  "Mobile Shoulder Rotation Trainer", "Quadriceps Training Chair",
-  "Single-User Standing Frame", "Recumbent Magnetic Lower Limb Exercise Bike",
-  "Pediatric Rehabilitation equipment", "Therapy Tables & Beds",
-];
-
-type Analysis = {
-  summary: string;
-  intent: string;
-  priority: "High" | "Medium" | "Low";
-  risk: string;
-  recommendedProduct: string;
-  leadScore: number;
-  confidence: number;
-  replySubject: string;
-  draftReply: string;
-};
+type Analysis = { summary: string; intent: string; priority: "高" | "中" | "低"; risk: string; recommendedProduct: string; leadScore: number; confidence: number; bodyTranslation: string; replySubject: string; draftReply: string; draftTranslation: string };
 
 export async function POST(request: Request) {
+  const auth = await requireApiUser(["admin", "sales"]); if (!auth.user) return auth.response;
   try {
+    assertSameOrigin(request);
     const { id } = await request.json() as { id?: number };
-    if (!id) return Response.json({ error: "Inquiry id is required." }, { status: 400 });
-    const db = await ensureDatabase();
-    const inquiry = await db.prepare(`SELECT i.*, c.name, c.email, c.company, c.country
-      FROM inquiries i JOIN customers c ON c.id=i.customer_id WHERE i.id=?`).bind(id).first<Record<string, string | number>>();
-    if (!inquiry) return Response.json({ error: "Inquiry not found." }, { status: 404 });
-
-    const runtime = env as unknown as Record<string, string | undefined>;
-    let analysis: Analysis;
-    let mode = "Demo";
-    if (runtime.OPENAI_API_KEY) {
-      analysis = await analyzeWithOpenAI(inquiry, runtime);
-      mode = "OpenAI";
-    } else {
-      analysis = demoAnalysis(inquiry);
-    }
-
-    await db.prepare(`UPDATE inquiries SET ai_summary=?, ai_intent=?, priority=?, ai_risk=?,
-      recommended_product=?, lead_score=?, confidence=?, reply_subject=?, draft_reply=?,
-      analysis_mode=?, status='Draft ready', updated_at=CURRENT_TIMESTAMP WHERE id=?`)
-      .bind(analysis.summary, analysis.intent, analysis.priority, analysis.risk,
-        analysis.recommendedProduct, analysis.leadScore, analysis.confidence,
-        analysis.replySubject, analysis.draftReply, mode, id).run();
-    const updated = await db.prepare(`SELECT i.*, c.name, c.email, c.company, c.country, c.customer_type, c.stage
-      FROM inquiries i JOIN customers c ON c.id=i.customer_id WHERE i.id=?`).bind(id).first();
-    return Response.json({ inquiry: updated, mode });
-  } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "Analysis failed." }, { status: 500 });
-  }
+    if (!id) return Response.json({ error: "询盘ID无效" }, { status: 400 });
+    const db = getDb();
+    const inquiry = db.prepare(`SELECT i.*,c.name,c.email,c.company,c.country,c.customer_type,c.stage FROM inquiries i JOIN customers c ON c.id=i.customer_id WHERE i.id=?`).get(id) as Record<string, string | number> | undefined;
+    if (!inquiry) return Response.json({ error: "询盘不存在" }, { status: 404 });
+    const profile = db.prepare("SELECT * FROM company_profile WHERE id=1").get() as Record<string, string>;
+    const knowledge = retrieveKnowledge(`${inquiry.subject}\n${inquiry.body}`, 8);
+    const provider = activeProvider();
+    let analysis: Analysis; let mode = "本地规则";
+    if (provider) { analysis = await analyzeWithProvider(provider, inquiry, profile, knowledge); mode = provider.name; }
+    else analysis = localAnalysis(inquiry, profile);
+    analysis.leadScore = clamp(analysis.leadScore); analysis.confidence = clamp(analysis.confidence);
+    if (!(["高", "中", "低"] as string[]).includes(analysis.priority)) analysis.priority = "中";
+    const sourceSummary = [...new Map(knowledge.map((item) => [item.fileId, { id: item.fileId, name: item.name, path: item.sourcePath, category: item.category }])).values()];
+    db.prepare(`UPDATE inquiries SET body_translation=?,ai_summary=?,ai_intent=?,priority=?,ai_risk=?,recommended_product=?,lead_score=?,confidence=?,reply_subject=?,draft_reply=?,draft_translation=?,analysis_mode=?,provider_id=?,knowledge_sources=?,status='草稿完成',updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`)
+      .run(analysis.bodyTranslation, analysis.summary, analysis.intent, analysis.priority, analysis.risk, analysis.recommendedProduct, analysis.leadScore, analysis.confidence, analysis.replySubject, analysis.draftReply, analysis.draftTranslation, mode, provider?.id || null, JSON.stringify(sourceSummary), auth.user.id, id);
+    const updated = db.prepare(`SELECT i.*,c.name,c.email,c.company,c.country,c.phone,c.customer_type,c.stage,p.name AS provider_name FROM inquiries i JOIN customers c ON c.id=i.customer_id LEFT JOIN ai_providers p ON p.id=i.provider_id WHERE i.id=?`).get(id);
+    audit(auth.user.id, "生成询盘分析与回复", "inquiry", String(id), `${mode} / 引用${sourceSummary.length}份资料`);
+    return Response.json({ inquiry: updated, mode, knowledgeSources: sourceSummary });
+  } catch (error) { return Response.json({ error: error instanceof Error ? error.message : "AI分析失败" }, { status: 500 }); }
 }
 
-async function analyzeWithOpenAI(inquiry: Record<string, string | number>, runtime: Record<string, string | undefined>): Promise<Analysis> {
-  const baseUrl = (runtime.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
-  const response = await fetch(`${baseUrl}/responses`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${runtime.OPENAI_API_KEY}` },
-    body: JSON.stringify({
-      model: runtime.OPENAI_MODEL || "gpt-5.6-terra",
-      reasoning: { effort: "low" },
-      safety_identifier: "rehabintl-crm-owner",
-      input: [
-        { role: "system", content: `You are RehabIntl's senior international rehabilitation-equipment sales assistant. Analyze inbound B2B inquiries and write a concise, professional English reply. Never invent price, certification, stock, lead time, warranty terms or product specifications. Ask targeted questions when facts are missing. The reply must remain a draft for human approval. Available product context: ${productContext.join(", ")}. Return only valid JSON.` },
-        { role: "user", content: `Customer: ${inquiry.name} | ${inquiry.company} | ${inquiry.country}\nSubject: ${inquiry.subject}\nEmail:\n${inquiry.body}\n\nReturn: summary in Chinese; intent in English; priority High/Medium/Low; risk in Chinese; recommendedProduct; leadScore 0-100; confidence 0-100; replySubject; draftReply in English.` },
-      ],
-      text: {
-        format: {
-          type: "json_schema", name: "inquiry_analysis", strict: true,
-          schema: {
-            type: "object", additionalProperties: false,
-            properties: {
-              summary: { type: "string" }, intent: { type: "string" },
-              priority: { type: "string", enum: ["High", "Medium", "Low"] },
-              risk: { type: "string" }, recommendedProduct: { type: "string" },
-              leadScore: { type: "integer", minimum: 0, maximum: 100 },
-              confidence: { type: "integer", minimum: 0, maximum: 100 },
-              replySubject: { type: "string" }, draftReply: { type: "string" },
-            },
-            required: ["summary", "intent", "priority", "risk", "recommendedProduct", "leadScore", "confidence", "replySubject", "draftReply"],
-          },
-        },
-      },
-    }),
-  });
-  if (!response.ok) throw new Error(`OpenAI request failed (${response.status}).`);
-  const payload = await response.json() as { output_text?: string; output?: Array<{ content?: Array<{ text?: string }> }> };
-  const text = payload.output_text || payload.output?.flatMap((item) => item.content || []).map((item) => item.text || "").join("");
-  if (!text) throw new Error("OpenAI returned no analysis.");
-  return JSON.parse(text) as Analysis;
+async function analyzeWithProvider(provider: NonNullable<ReturnType<typeof activeProvider>>, inquiry: Record<string, string | number>, profile: Record<string, string>, knowledge: ReturnType<typeof retrieveKnowledge>): Promise<Analysis> {
+  const knowledgeText = knowledge.length ? knowledge.map((item, index) => `【资料${index + 1}：${item.name}｜${item.category}】\n${item.content}`).join("\n\n") : "当前知识库没有匹配资料。";
+  const text = await callModel(provider, [
+    { role: "system", content: `你是${profile.company_name || "RehabIntl"}的资深康复医疗设备外贸销售助理。根据客户邮件和检索到的公司资料，分析客户并生成可人工审核的英文回复草稿。\n硬性规则：1. 不得编造价格、库存、交期、认证、质保、技术参数或独家政策；2. 资料未提供的事实必须向客户询问或说明待确认；3. 回复专业、自然、简洁；4. 如果原邮件不是中文，完整翻译为中文；5. 英文回复必须另给完整中文翻译；6. 只使用给定资料，不要把内部文件名告诉客户；7. 返回纯JSON对象。\n公司概况：${profile.business_summary}\n销售规则：${profile.sales_rules}\n署名：${profile.reply_signature}` },
+    { role: "user", content: `客户：${inquiry.name}｜${inquiry.company}｜${inquiry.country}｜${inquiry.email}\n主题：${inquiry.subject}\n邮件正文：\n${inquiry.body}\n\n相关公司资料：\n${knowledgeText}\n\n返回字段：summary（中文需求摘要）, intent（中文意向类型）, priority（高/中/低）, risk（中文风险与待确认事项）, recommendedProduct（中文或产品英文名）, leadScore（0-100）, confidence（0-100）, bodyTranslation（原邮件完整中文翻译；原文中文则整理为中文）, replySubject（英文邮件主题）, draftReply（英文回复全文）, draftTranslation（draftReply完整中文翻译）。` },
+  ], { json: true, maxTokens: 5200 });
+  return extractJson<Analysis>(text);
 }
 
-function demoAnalysis(inquiry: Record<string, string | number>): Analysis {
-  const body = `${inquiry.subject} ${inquiry.body}`.toLowerCase();
-  const distributor = /distribut|dealer|exclusive|cooperation/.test(body);
-  const gait = /gait|walking|walk trainer/.test(body);
-  const pediatric = /pediatric|children|child/.test(body);
-  const quote = /quote|quotation|price|cost/.test(body);
-  const quantity = /\b\d+\b|project|tender|department|hospital/.test(body);
-  const recommendedProduct = gait ? "Body Weight Support Gait Trainer" : pediatric ? "Pediatric Rehabilitation starter package" : distributor ? "RehabIntl full product catalog" : "RehabIntl rehabilitation equipment range";
-  const intent = distributor ? "Distributor cooperation" : quote ? "Quotation request" : "Product consultation";
-  const leadScore = Math.min(94, 55 + (quote ? 16 : 0) + (quantity ? 14 : 0) + (distributor ? 10 : 0));
-  const name = String(inquiry.name || "Sir or Madam");
-  const salutation = name.includes(" ") ? `Dear ${name},` : `Dear ${name},`;
-  const questions = distributor
-    ? "Could you please share your main sales channels, current rehabilitation product portfolio, target markets, expected annual purchasing volume, and the product categories you are most interested in?"
-    : gait
-      ? "Could you please confirm the expected patient weight range, required functions, destination city, intended quantity, and whether on-site installation is needed?"
-      : pediatric
-        ? "Could you please share the children's age range, room dimensions, target budget, destination city, and the therapies you plan to provide?"
-        : "Could you please confirm the intended application, quantity, destination city, required specifications, and purchasing timeline?";
-  return {
-    summary: distributor ? "客户希望洽谈区域经销合作，关注目录、经销价格、MOQ和独家政策，需先核实渠道能力与预计采购量。" : `客户对${recommendedProduct}感兴趣，需求较明确；报价前仍需补充数量、配置、目的地和时间计划。`,
-    intent,
-    priority: leadScore >= 80 ? "High" : "Medium",
-    risk: "尚未确认具体型号、数量、交付地址及关键技术要求；回复中不要承诺价格、认证或交期。",
-    recommendedProduct,
-    leadScore,
-    confidence: 86,
-    replySubject: `Re: ${inquiry.subject}`,
-    draftReply: `${salutation}\n\nThank you for contacting RehabIntl and for sharing your requirements. We appreciate your interest in ${recommendedProduct}.\n\n${questions}\n\nOnce we receive these details, we will prepare a suitable recommendation and quotation for your review.\n\nBest regards,\nRehabIntl Sales Team`,
-  };
+function localAnalysis(inquiry: Record<string, string | number>, profile: Record<string, string>): Analysis {
+  const content = `${inquiry.subject} ${inquiry.body}`.toLowerCase();
+  const distributor = /distribut|dealer|exclusive|经销|代理/.test(content); const gait = /gait|walking|步态|行走/.test(content); const pediatric = /pediatric|children|child|儿童/.test(content); const quote = /quote|quotation|price|cost|报价|价格/.test(content);
+  const product = gait ? "Body Weight Support Gait Trainer" : pediatric ? "儿童康复设备入门配置" : distributor ? "RehabIntl 全系列产品目录" : "康复医疗设备方案";
+  const score = Math.min(92, 55 + (quote ? 18 : 0) + (distributor ? 12 : 0) + (/\b\d+\b|project|tender|hospital|项目|医院/.test(content) ? 12 : 0));
+  const salutation = String(inquiry.name || "Sir or Madam");
+  const questions = distributor ? "Could you please share your sales channels, target markets, current product portfolio and expected annual purchasing volume?" : "Could you please confirm the intended application, quantity, destination city, required specifications and purchasing timeline?";
+  const draft = `Dear ${salutation},\n\nThank you for contacting ${profile.brand || "RehabIntl"} and for sharing your requirements. We appreciate your interest in ${product}.\n\n${questions}\n\nOnce we receive these details, we will prepare a suitable recommendation and quotation for your review.\n\n${profile.reply_signature || "Best regards,\nRehabIntl Sales Team"}`;
+  return { summary: `客户对${product}有兴趣，报价或方案前仍需确认数量、规格、目的地和采购时间。`, intent: distributor ? "经销合作" : quote ? "询价" : "产品咨询", priority: score >= 80 ? "高" : "中", risk: "尚未确认关键商务和技术条件；未配置AI时不应直接发送此通用草稿。", recommendedProduct: product, leadScore: score, confidence: 70, bodyTranslation: "未配置可用的AI模型，暂不能生成准确的中文全文翻译。", replySubject: `Re: ${inquiry.subject}`, draftReply: draft, draftTranslation: `尊敬的${salutation}：\n\n感谢您联系${profile.brand || "RehabIntl"}并介绍需求。我们重视您对${product}的关注。\n\n为准备合适的建议和报价，请确认应用场景、数量、目的地、所需规格和采购时间。\n\n收到信息后，我们将准备方案供您审核。\n\n${profile.company_name || "RehabIntl"}销售团队` };
 }
+function clamp(value: number) { return Math.max(0, Math.min(100, Number(value) || 0)); }
