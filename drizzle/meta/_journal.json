@@ -1,0 +1,20 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1785756507742,
+      "tag": "0000_friendly_jack_power",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1785756548600,
+      "tag": "0001_chief_joystick",
+      "breakpoints": true
+    }
+  ]
+}
