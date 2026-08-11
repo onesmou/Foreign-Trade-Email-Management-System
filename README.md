@@ -24,7 +24,7 @@ npm ci
 npm run dev
 ```
 
-打开 `http://localhost:3000/setup` 创建首位管理员。
+打开 `http://localhost:3011/setup` 创建首位管理员。
 
 ## 生产运行
 
