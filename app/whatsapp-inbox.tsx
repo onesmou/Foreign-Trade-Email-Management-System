@@ -22,6 +22,7 @@ type Contact = {
   avatar: string;
   avatar_status: string;
   avatar_checked_at: number;
+  default_project_id: number | null;
 };
 type Message = {
   id: number;
@@ -83,6 +84,7 @@ export default function WhatsAppInbox({
     [target, setTarget] = useState(0),
     [more, setMore] = useState(false),
     [language, setLanguage] = useState("英语");
+  const [projects, setProjects] = useState<{ id: number; title: string }[]>([]);
   const selectedRef = useRef(""),
     sendRef = useRef<{ jid: string; body: string; id: string } | null>(null);
   const messageArea = useRef<HTMLDivElement>(null),
@@ -97,6 +99,7 @@ export default function WhatsAppInbox({
         const selected = selectedRef.current,
           m = await request(undefined, selected);
         if (selectedRef.current === selected) {
+          setProjects(m.projects || []);
           if (m.jid && m.jid !== selected) {
             selectedRef.current = m.jid;
             setJid(m.jid);
@@ -165,9 +168,11 @@ export default function WhatsAppInbox({
     setDraft("");
     setConfirm(false);
     setTarget(0);
+    setProjects([]);
     try {
       const d = await request(undefined, value);
       if (selectedRef.current === value) {
+        setProjects(d.projects || []);
         if (d.jid && d.jid !== value) {
           selectedRef.current = d.jid;
           setJid(d.jid);
@@ -373,6 +378,48 @@ export default function WhatsAppInbox({
                   </div>
                 )}
               </header>
+              {contact.customer_id && (
+                <div className="wa-history">
+                  <label>
+                    此聊天的新消息归属
+                    <select
+                      aria-label="WhatsApp默认采购项目"
+                      disabled={busy}
+                      value={
+                        projects.some(
+                          (p) => p.id === contact.default_project_id,
+                        )
+                          ? contact.default_project_id!
+                          : 0
+                      }
+                      onChange={async (e) => {
+                        const d = await action({
+                          action: "project",
+                          projectId: Number(e.target.value),
+                        });
+                        if (d) onNotify(d.note);
+                      }}
+                    >
+                      <option value={0}>
+                        未指定（单项目自动归入，多项目待确认）
+                      </option>
+                      {projects.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.title}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {projects.length > 1 &&
+                    !projects.some(
+                      (p) => p.id === contact.default_project_id,
+                    ) && (
+                      <small>
+                        该客户有多个进行中项目。请指定新消息项目，或在客户沟通记录逐条归类，系统不会猜测。
+                      </small>
+                    )}
+                </div>
+              )}
               <div className="wa-messages" ref={messageArea}>
                 <div className="wa-history">
                   <button

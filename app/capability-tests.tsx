@@ -89,6 +89,7 @@ export default function CapabilityTests() {
               { id: "stream", name: "流式" },
               { id: "tools", name: "工具" },
               { id: "structured", name: "JSON" },
+              { id: "vision", name: "看图" },
             ].map((c) => {
               const result = results.find(
                 (r) => r.provider_id === p.id && r.capability === c.id,
@@ -113,8 +114,7 @@ export default function CapabilityTests() {
             })}
           </div>
           <small>
-            图像：请在资料库上传图片并开启自动AI整理，或对已有图片点击“重新识别”验证。
-            检索效果还需用真实产品文件验收。
+            看图测试只发送系统生成的数字图片，不发送客户文件。扫描PDF、乱码资料归类及真实产品检索仍需用你指定的样例单独验收。
           </small>
         </div>
       ))}

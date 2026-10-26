@@ -4,6 +4,7 @@ import {
   customerFor,
   findOrCreateCustomer,
   type Row,
+  validProject,
 } from "../../../../lib/crm";
 import { privateJid } from "../../../../lib/whatsapp-store";
 import { canonicalJid } from "../../../../lib/whatsapp-identity";
@@ -45,6 +46,11 @@ export async function GET(request: Request) {
       messages: rows.reverse(),
       jid,
       hasMore: rows.length === 100,
+      projects: db
+        .prepare(
+          "SELECT p.id,p.title FROM projects p JOIN wa_contacts w ON w.customer_id=p.customer_id WHERE w.jid=? AND w.selected=1 AND p.stage NOT IN ('成交','暂停','流失') ORDER BY p.id DESC",
+        )
+        .all(jid),
     });
   }
   const contacts = db
@@ -75,6 +81,33 @@ export async function POST(request: Request) {
       .prepare("SELECT * FROM wa_contacts WHERE jid=?")
       .get(jid) as Row | undefined;
     if (!contact) throw new Error("联系人不存在");
+    if (d.action === "project") {
+      const projectId = Number(d.projectId || 0);
+      if (!contact.customer_id) throw new Error("请先关联客户");
+      const project = projectId
+        ? validProject(Number(contact.customer_id), projectId)
+        : null;
+      if (
+        projectId &&
+        (!project || ["成交", "暂停", "流失"].includes(String(project.stage)))
+      )
+        throw new Error("请选择该客户进行中的采购项目");
+      db.prepare("UPDATE wa_contacts SET default_project_id=? WHERE jid=?").run(
+        projectId || null,
+        jid,
+      );
+      audit(
+        a.user.id,
+        "设置WhatsApp新消息项目",
+        "customer",
+        String(contact.customer_id),
+        String(projectId),
+      );
+      return Response.json({
+        ok: true,
+        note: "只影响之后新消息；已有未归类消息请在客户时间线中归类",
+      });
+    }
     if (d.action === "avatar") {
       await refreshWhatsAppAvatar(jid, d.force === true);
       return Response.json({ ok: true });

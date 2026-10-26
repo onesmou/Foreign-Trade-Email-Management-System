@@ -34,6 +34,9 @@ export function migrateWorkspace(db: DatabaseSync) {
   column("knowledge_files", "can_send", "INTEGER NOT NULL DEFAULT 1");
   column("knowledge_files", "index_policy", "TEXT NOT NULL DEFAULT 'auto'");
   db.exec(`
+    CREATE TABLE IF NOT EXISTS backup_schedule(id INTEGER PRIMARY KEY CHECK(id=1),enabled INTEGER NOT NULL DEFAULT 0,hour INTEGER NOT NULL DEFAULT 3,last_checked_at TEXT NOT NULL DEFAULT '',updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+    INSERT OR IGNORE INTO backup_schedule(id) VALUES(1);
+    CREATE TABLE IF NOT EXISTS backup_jobs(day TEXT PRIMARY KEY,status TEXT NOT NULL,attempts INTEGER NOT NULL DEFAULT 1,last_attempt_at TEXT NOT NULL,backup_id TEXT NOT NULL DEFAULT '',error TEXT NOT NULL DEFAULT '');
     CREATE TABLE IF NOT EXISTS conversation_imports(id TEXT PRIMARY KEY,source_system TEXT NOT NULL,thread_id TEXT NOT NULL,source_title TEXT NOT NULL,source_hash TEXT NOT NULL,customer_id INTEGER NOT NULL REFERENCES customers(id),project_id INTEGER NOT NULL REFERENCES projects(id),coverage TEXT NOT NULL,imported_by INTEGER NOT NULL REFERENCES users(id),imported_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,UNIQUE(source_system,thread_id));
     CREATE TABLE IF NOT EXISTS imported_chat_items(id INTEGER PRIMARY KEY,import_id TEXT NOT NULL REFERENCES conversation_imports(id),source_item_id TEXT NOT NULL,source_turn_id TEXT NOT NULL,ordinal INTEGER NOT NULL,role TEXT NOT NULL,phase TEXT NOT NULL DEFAULT '',body TEXT NOT NULL,recorded_at TEXT NOT NULL DEFAULT '',UNIQUE(import_id,source_item_id));
     CREATE TABLE IF NOT EXISTS imported_files(import_id TEXT NOT NULL REFERENCES conversation_imports(id),file_id INTEGER NOT NULL REFERENCES knowledge_files(id),original_path TEXT NOT NULL,sha256 TEXT NOT NULL,role TEXT NOT NULL,PRIMARY KEY(import_id,file_id));
@@ -82,6 +85,33 @@ export function migrateWorkspace(db: DatabaseSync) {
     CREATE INDEX IF NOT EXISTS idx_files_scope ON knowledge_files(scope,customer_id,is_current);
   `);
   column("communications", "occurred_label", "TEXT NOT NULL DEFAULT ''");
+  column("projects", "auto_progress", "INTEGER NOT NULL DEFAULT 0");
+  column(
+    "wa_contacts",
+    "default_project_id",
+    "INTEGER REFERENCES projects(id)",
+  );
+  column("projects", "follow_up_days", "INTEGER NOT NULL DEFAULT 3");
+  column("projects", "progress_revision", "INTEGER NOT NULL DEFAULT 0");
+  column(
+    "communications",
+    "progress_state",
+    "TEXT NOT NULL DEFAULT 'not_requested'",
+  );
+  column("communications", "progress_error", "TEXT NOT NULL DEFAULT ''");
+  column(
+    "progress_suggestions",
+    "project_revision",
+    "INTEGER NOT NULL DEFAULT 0",
+  );
+  column(
+    "progress_suggestions",
+    "basis_message_id",
+    "INTEGER NOT NULL DEFAULT 0",
+  );
+  db.exec(
+    "UPDATE progress_suggestions SET status='superseded' WHERE status='pending' AND basis_message_id=0",
+  );
   column("communications", "source_ref", "TEXT NOT NULL DEFAULT ''");
   column("wa_contacts", "ignored", "INTEGER NOT NULL DEFAULT 0");
   column("wa_contacts", "avatar", "TEXT NOT NULL DEFAULT ''");

@@ -81,7 +81,10 @@ test(
         translationCalls++;
         return json("请报价 10 台 KM-T20，运往迪拜。");
       }
-      if (all.includes("整理客户最新消息"))
+      if (
+        all.includes("整理客户最新消息") ||
+        all.includes("整理双方最新真实沟通")
+      )
         return json(
           JSON.stringify({
             summary: "客户已确认10台，询问迪拜运费",
@@ -462,8 +465,15 @@ test(
       r = await req("/api/whatsapp");
       assert.equal(r.body.status, "disconnected");
       assert.equal(r.body.verified, false);
-      assert.equal(r.body.range.total,0,"manual WhatsApp examples are not counted as synchronized messages");
-      r=await req("/api/whatsapp",send({action:"cancel"}));assert.equal(r.status,200);assert.equal(r.body.status,"disconnected");assert.match(r.body.error,/已停止/);
+      assert.equal(
+        r.body.range.total,
+        0,
+        "manual WhatsApp examples are not counted as synchronized messages",
+      );
+      r = await req("/api/whatsapp", send({ action: "cancel" }));
+      assert.equal(r.status, 200);
+      assert.equal(r.body.status, "disconnected");
+      assert.match(r.body.error, /已停止/);
       r = await req("/api/whatsapp", send({ action: "connect" }));
       assert.equal(r.status, 400, "cannot connect without risk consent");
       r = await req(

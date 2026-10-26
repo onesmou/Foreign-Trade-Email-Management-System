@@ -118,22 +118,21 @@ export function findOrCreateCustomer(
   }
   // Legacy email is NOT NULL UNIQUE: reserved internal identity, never presented as a customer email.
   const key = email || `${randomUUID()}@identity.invalid`;
-  const id = Number(
-    db
-      .prepare(
-        "INSERT INTO customers(name,email,phone,company,country,owner_id,first_source,campaign) VALUES(?,?,?,?,?,?,?,?)",
-      )
-      .run(
-        input.name || "待补充联系人",
-        key,
-        phone ? `+${phone}` : "",
-        input.company || "",
-        input.country || "",
-        user.id,
-        input.source || "其他",
-        input.campaign || "",
-      ).lastInsertRowid,
-  );
+  const inserted = db
+    .prepare(
+      "INSERT INTO customers(name,email,phone,company,country,owner_id,first_source,campaign) VALUES(?,?,?,?,?,?,?,?)",
+    )
+    .run(
+      input.name || "待补充联系人",
+      key,
+      phone ? `+${phone}` : "",
+      input.company || "",
+      input.country || "",
+      user.id,
+      input.source || "其他",
+      input.campaign || "",
+    );
+  const id = Number(inserted.lastInsertRowid);
   return { id, existing: false };
 }
 export function addProject(customerId: number, title: string) {
@@ -162,33 +161,53 @@ export function addCommunication(input: {
   analyze?: boolean;
 }) {
   const db = getDb();
-  const id = Number(
-    db
+  const inserted = db
+    .prepare(
+      `INSERT OR IGNORE INTO communications(customer_id,project_id,channel,direction,subject,body,created_by,external_id,send_status,occurred_at) VALUES(?,?,?,?,?,?,?,?,?,?)`,
+    )
+    .run(
+      input.customerId,
+      input.projectId || null,
+      input.channel,
+      input.direction || "inbound",
+      input.subject || "",
+      input.body.slice(0, 100000),
+      input.userId || null,
+      input.externalId || null,
+      input.status || "received",
+      input.occurredAt || new Date().toISOString(),
+    );
+  const id = Number(inserted.lastInsertRowid);
+  if (!inserted.changes) {
+    const existing = db
       .prepare(
-        `INSERT OR IGNORE INTO communications(customer_id,project_id,channel,direction,subject,body,created_by,external_id,send_status,occurred_at) VALUES(?,?,?,?,?,?,?,?,?,?)`,
+        "SELECT id FROM communications WHERE external_id=? AND customer_id=?",
       )
-      .run(
-        input.customerId,
-        input.projectId || null,
-        input.channel,
-        input.direction || "inbound",
-        input.subject || "",
-        input.body.slice(0, 100000),
-        input.userId || null,
-        input.externalId || null,
-        input.status || "received",
-        input.occurredAt || new Date().toISOString(),
-      ).lastInsertRowid,
-  );
+      .get(input.externalId || null, input.customerId) as
+      { id: number } | undefined;
+    if (!existing) throw new Error("消息标识冲突，未更新已有记录");
+    return existing.id;
+  }
   db.prepare(
     "UPDATE customers SET updated_at=CURRENT_TIMESTAMP WHERE id=?",
   ).run(input.customerId);
   if (
     input.analyze !== false &&
-    input.direction !== "outbound" &&
+    (input.direction !== "outbound" ||
+      [
+        "accepted",
+        "delivered",
+        "read",
+        "synced",
+        "manual_sent",
+        "confirmed_sent",
+      ].includes(input.status || "")) &&
     input.channel !== "note" &&
     input.projectId
-  )
+  ) {
+    db.prepare(
+      "UPDATE communications SET progress_state='queued' WHERE id=?",
+    ).run(id);
     setTimeout(
       () =>
         void import("./progress")
@@ -196,6 +215,7 @@ export function addCommunication(input: {
           .catch(() => {}),
       20,
     );
+  }
   return id;
 }
 export function fileAccess(user: SessionUser, file: Row) {

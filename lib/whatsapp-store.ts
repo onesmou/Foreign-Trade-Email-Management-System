@@ -69,6 +69,11 @@ export function archiveInbox(jid: string, analyzeKey?: string) {
     )
     .all(contact.customer_id) as Row[];
   let projectId = projects.length === 1 ? Number(projects[0].id) : undefined;
+  if (
+    contact.default_project_id &&
+    projects.some((p) => Number(p.id) === Number(contact.default_project_id))
+  )
+    projectId = Number(contact.default_project_id);
   if (!projects.length)
     projectId = addProject(Number(contact.customer_id), "WhatsApp采购需求");
   for (const m of messages) {
@@ -126,6 +131,29 @@ export function updateDelivery(jid: string, key: string, status: string) {
     db.prepare(
       "UPDATE communications SET send_status=? WHERE external_id=? AND direction='outbound'",
     ).run(status, `wa:${contact.customer_id}:${key}`);
+  if (
+    contact?.customer_id &&
+    ["accepted", "delivered", "read", "synced"].includes(status)
+  ) {
+    const external = `wa:${contact.customer_id}:${key}`;
+    const changed = db
+      .prepare(
+        "UPDATE communications SET progress_state='queued' WHERE external_id=? AND project_id IS NOT NULL AND progress_state='not_requested'",
+      )
+      .run(external);
+    if (changed.changes) {
+      const message = db
+        .prepare("SELECT id FROM communications WHERE external_id=?")
+        .get(external) as { id: number };
+      setTimeout(
+        () =>
+          void import("./progress")
+            .then((m) => m.suggestProgress(message.id))
+            .catch(() => {}),
+        20,
+      );
+    }
+  }
 }
 
 // Transport injected for tests, never an HTTP test-send backdoor.

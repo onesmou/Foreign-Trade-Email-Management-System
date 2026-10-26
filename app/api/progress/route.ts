@@ -1,7 +1,10 @@
 import { assertSameOrigin, requireApiUser } from "../../../lib/auth";
 import { customerFor, type Row } from "../../../lib/crm";
 import { audit, getDb } from "../../../lib/db";
-import { progressSchema, suggestProgress } from "../../../lib/progress";
+import { suggestProgress } from "../../../lib/progress";
+import { applyProgressSuggestion } from "../../../lib/progress-review";
+import { progressMessageSql } from "../../../lib/progress-format";
+import { providerFor } from "../../../lib/ai";
 export const runtime = "nodejs";
 export async function POST(request: Request) {
   const a = await requireApiUser(["admin", "sales"]);
@@ -13,9 +16,11 @@ export async function POST(request: Request) {
     const id = Number(d.customerId);
     customerFor(a.user, id);
     if (d.action === "analyze") {
+      if (!providerFor("analysis"))
+        throw new Error("尚未配置分析模型，请先到设置中配置并测试");
       const m = db
         .prepare(
-          "SELECT id FROM communications WHERE customer_id=? AND project_id=? ORDER BY id DESC LIMIT 1",
+          `SELECT id FROM communications WHERE customer_id=? AND project_id=? AND ${progressMessageSql} ORDER BY julianday(occurred_at) DESC,id DESC LIMIT 1`,
         )
         .get(id, Number(d.projectId)) as { id: number } | undefined;
       if (!m) throw new Error("请先录入沟通记录");
@@ -29,42 +34,9 @@ export async function POST(request: Request) {
       .get(Number(d.suggestionId), id) as Row | undefined;
     if (!row) throw new Error("建议不存在或已处理");
     if (d.action === "apply") {
-      const p = progressSchema.parse(JSON.parse(String(row.payload)));
-      if (p.conflicts.length)
-        throw new Error(
-          "包含冲突信息，请在项目和客户记忆中人工纠正，不自动覆盖",
-        );
-      db.exec("BEGIN IMMEDIATE");
-      try {
-        db.prepare(
-          "UPDATE projects SET product=COALESCE(NULLIF(?,''),product),quantity=COALESCE(NULLIF(?,''),quantity),destination=COALESCE(NULLIF(?,''),destination),waiting_on=?,next_action=?,follow_up='',evidence_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND customer_id=?",
-        ).run(
-          p.product,
-          p.quantity,
-          p.destination,
-          p.waiting_on,
-          p.next_action,
-          row.evidence_id,
-          row.project_id,
-          id,
-        );
-        db.prepare(
-          "INSERT INTO customer_memories(customer_id,project_id,content,kind,evidence_id,created_by) VALUES(?,?,?,'user',?,?)",
-        ).run(
-          id,
-          row.project_id,
-          `已复核消息 #${row.evidence_id}：${p.summary}`,
-          row.evidence_id,
-          a.user.id,
-        );
-        db.prepare(
-          "UPDATE progress_suggestions SET status='applied' WHERE id=?",
-        ).run(row.id);
-        db.exec("COMMIT");
-      } catch (e) {
-        db.exec("ROLLBACK");
-        throw e;
-      }
+      const result = applyProgressSuggestion(Number(row.id), a.user.id);
+      if (!result.applied)
+        return Response.json({ error: result.reason }, { status: 409 });
     } else if (d.action === "dismiss")
       db.prepare(
         "UPDATE progress_suggestions SET status='dismissed' WHERE id=?",

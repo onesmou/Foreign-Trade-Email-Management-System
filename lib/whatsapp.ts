@@ -489,7 +489,7 @@ export function archiveMessage(message: WAMessage, history = false) {
     mediaName: media && !once ? mediaName.slice(0, 255) : "",
     mediaMime: media?.mimetype || "application/octet-stream",
     mediaSize: Number(media?.fileLength || 0),
-    analyze: !history && !message.key.fromMe,
+    analyze: !history,
   });
   const now = new Date().toISOString();
   state().lastSync = now;
@@ -504,8 +504,10 @@ export function selectContact(
   const row = getDb().prepare("SELECT * FROM wa_contacts WHERE jid=?").get(jid);
   if (!row) throw new Error("未发现此联系人。请等待同步或检查号码");
   getDb()
-    .prepare("UPDATE wa_contacts SET customer_id=?,selected=? WHERE jid=?")
-    .run(customerId, selected ? 1 : 0, jid);
+    .prepare(
+      "UPDATE wa_contacts SET default_project_id=CASE WHEN customer_id=? THEN default_project_id ELSE NULL END,customer_id=?,selected=? WHERE jid=?",
+    )
+    .run(customerId, customerId, selected ? 1 : 0, jid);
   if (selected) archiveInbox(jid);
 }
 export function whatsappConnected() {

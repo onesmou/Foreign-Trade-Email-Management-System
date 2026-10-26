@@ -9,6 +9,7 @@ import {
 } from "../../../lib/crm";
 import { audit, getDb } from "../../../lib/db";
 import { sdkModel } from "../../../lib/model";
+import { progressMessageSql } from "../../../lib/progress-format";
 export const runtime = "nodejs";
 export async function POST(request: Request) {
   const a = await requireApiUser(["admin", "sales"]);
@@ -26,9 +27,24 @@ export async function POST(request: Request) {
         .prepare("SELECT id FROM communications WHERE id=? AND customer_id=?")
         .get(Number(d.messageId), id);
       if (!message) throw new Error("消息不存在");
+      const eligible = Boolean(
+        db
+          .prepare(
+            `SELECT id FROM communications WHERE id=? AND ${progressMessageSql}`,
+          )
+          .get(Number(d.messageId)),
+      );
       db.prepare(
-        "UPDATE communications SET project_id=? WHERE id=? AND customer_id=?",
-      ).run(projectId, Number(d.messageId), id);
+        "UPDATE communications SET project_id=?,progress_state=?,progress_error='' WHERE id=? AND customer_id=?",
+      ).run(
+        projectId,
+        eligible ? "queued" : "not_requested",
+        Number(d.messageId),
+        id,
+      );
+      db.prepare(
+        "UPDATE progress_suggestions SET status='superseded' WHERE evidence_id=? AND status='pending'",
+      ).run(Number(d.messageId));
       audit(
         a.user.id,
         "归类沟通项目",
@@ -36,13 +52,14 @@ export async function POST(request: Request) {
         String(d.messageId),
         String(projectId),
       );
-      setTimeout(
-        () =>
-          void import("../../../lib/progress")
-            .then((m) => m.suggestProgress(Number(d.messageId)))
-            .catch(() => {}),
-        20,
-      );
+      if (eligible)
+        setTimeout(
+          () =>
+            void import("../../../lib/progress")
+              .then((m) => m.suggestProgress(Number(d.messageId)))
+              .catch(() => {}),
+          20,
+        );
       return Response.json({ ok: true });
     }
     if (d.action === "translate") {

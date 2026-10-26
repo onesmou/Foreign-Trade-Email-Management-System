@@ -5,6 +5,7 @@ import { type ProviderConfig } from "../../../../lib/ai";
 import { decryptSecret } from "../../../../lib/security";
 import { getDb } from "../../../../lib/db";
 import { sdkModel } from "../../../../lib/model";
+import { createVisionProbe } from "../../../../lib/vision-probe";
 export const runtime = "nodejs";
 export async function GET() {
   const a = await requireApiUser(["admin"]);
@@ -23,13 +24,16 @@ export async function POST(request: Request) {
   if (!a.user) return a.response;
   let id = 0;
   let capability = "";
+  let secret = "";
   try {
     assertSameOrigin(request);
     const d = await request.json();
     id = Number(d.id);
     capability = String(d.capability);
-    if (!["text", "stream", "tools", "structured"].includes(capability))
-      throw new Error("请选择文本、流式、工具或结构化测试");
+    if (
+      !["text", "stream", "tools", "structured", "vision"].includes(capability)
+    )
+      throw new Error("请选择文本、流式、工具、结构化或图像测试");
     const db = getDb();
     const p = db.prepare("SELECT * FROM ai_providers WHERE id=?").get(id) as
       Record<string, string> | undefined;
@@ -43,6 +47,7 @@ export async function POST(request: Request) {
       apiKey: decryptSecret(p.api_key_cipher),
     };
     const model = sdkModel(config);
+    secret = config.apiKey;
     const started = Date.now();
     const base = {
       model,
@@ -50,7 +55,28 @@ export async function POST(request: Request) {
       maxRetries: 0,
       abortSignal: AbortSignal.timeout(45000),
     };
-    if (capability === "stream") {
+    if (capability === "vision") {
+      const probe = await createVisionProbe();
+      const r = await generateText({
+        ...base,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: "准确读取图片中四位数字，只输出四位数字，不附加说明。不知道时输出unknown。",
+              },
+              { type: "image", image: probe.image },
+            ],
+          },
+        ],
+      });
+      if (r.text.trim() !== probe.expected)
+        throw new Error(
+          "接口未正确识别合成测试图，请检查模型和中转的图像能力；这不是产品资料识别准确率保证",
+        );
+    } else if (capability === "stream") {
       const r = streamText({ ...base, prompt: "请用中文回复：测试成功" });
       let text = "";
       for await (const chunk of r.textStream) text += chunk;
@@ -91,7 +117,11 @@ export async function POST(request: Request) {
     ).run(id, capability, detail);
     return Response.json({ ok: true, detail });
   } catch (e) {
-    const error = (e as Error).message;
+    let error = (e as Error).message;
+    if (secret) error = error.replaceAll(secret, "[密钥已隐藏]");
+    error = error
+      .replace(/(?:sk-|Bearer\s+)\S+/gi, "[密钥已隐藏]")
+      .slice(0, 1000);
     if (
       id &&
       capability &&

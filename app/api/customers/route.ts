@@ -11,6 +11,7 @@ import {
 } from "../../../lib/crm";
 import { audit, getDb } from "../../../lib/db";
 import { parseRawEmail } from "../../../lib/email";
+import { changeCustomerAccess } from "../../../lib/customer-permissions";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
@@ -116,8 +117,11 @@ export async function PATCH(request: Request) {
       if (!p) throw new Error("项目不存在");
       const stage = d.stage || p.stage;
       if (!stages.includes(stage)) throw new Error("阶段无效");
+      const followDays = Number(d.follow_up_days ?? p.follow_up_days);
+      if (!Number.isInteger(followDays) || followDays < 0 || followDays > 90)
+        throw new Error("自动跟进天数需为0到90，0代表不自动设置日期");
       db.prepare(
-        "UPDATE projects SET title=?,stage=?,product=?,quantity=?,destination=?,waiting_on=?,next_action=?,follow_up=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+        "UPDATE projects SET title=?,stage=?,product=?,quantity=?,destination=?,waiting_on=?,next_action=?,follow_up=?,auto_progress=?,follow_up_days=?,progress_revision=progress_revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=?",
       ).run(
         String(d.title ?? p.title).slice(0, 160),
         stage,
@@ -127,8 +131,17 @@ export async function PATCH(request: Request) {
         String(d.waiting_on ?? p.waiting_on).slice(0, 40),
         String(d.next_action ?? p.next_action).slice(0, 2000),
         String(d.follow_up ?? p.follow_up).slice(0, 30),
+        d.auto_progress === undefined
+          ? p.auto_progress
+          : [true, 1, "1", "true", "on"].includes(d.auto_progress)
+            ? 1
+            : 0,
+        followDays,
         p.id,
       );
+      db.prepare(
+        "UPDATE progress_suggestions SET status='superseded' WHERE project_id=? AND status='pending'",
+      ).run(p.id);
     } else if (d.action === "newProject")
       addProject(id, String(d.title || "新采购项目"));
     else if (d.action === "memory") {
@@ -147,15 +160,9 @@ export async function PATCH(request: Request) {
       db.prepare(
         "DELETE FROM customer_memories WHERE id=? AND customer_id=?",
       ).run(Number(d.memoryId), id);
-    else if (d.action === "grant") {
+    else if (["grant", "revoke", "transfer"].includes(d.action)) {
       if (a.user.role !== "admin") throw new Error("仅管理员可分配客户");
-      const user = db
-        .prepare("SELECT id FROM users WHERE id=? AND status='active'")
-        .get(Number(d.userId));
-      if (!user) throw new Error("账号不存在");
-      db.prepare(
-        "INSERT OR IGNORE INTO customer_access(customer_id,user_id) VALUES(?,?)",
-      ).run(id, Number(d.userId));
+      changeCustomerAccess(id, Number(d.userId), d.action);
     } else throw new Error("未知操作");
     audit(a.user.id, "更新客户工作台", "customer", String(id), d.action);
     return Response.json(customerDetail(a.user, id));

@@ -39,6 +39,7 @@ import { SettingsPanel, type Settings } from "./legacy-ui";
 import WhatsAppPanel from "./whatsapp-panel";
 import ProgressSuggestion from "./progress-suggestion";
 import CustomerAccess from "./customer-access";
+import ReadinessChecklist from "./readiness-checklist";
 import FolderLibrary from "./folder-library";
 import WhatsAppInbox from "./whatsapp-inbox";
 import IntakeSources from "./intake-sources";
@@ -75,6 +76,8 @@ type Project = RecordRow & {
   waiting_on: string;
   next_action: string;
   follow_up: string;
+  auto_progress: number;
+  follow_up_days: number;
 };
 type Message = RecordRow & {
   channel: string;
@@ -88,6 +91,8 @@ type Message = RecordRow & {
   wa_message_id: number | null;
   media_name: string | null;
   media_available: number | null;
+  progress_state: string;
+  progress_error: string;
 };
 type Source = {
   fileId: number;
@@ -599,6 +604,7 @@ export default function Workspace() {
                     </span>
                   </div>
                 </div>
+                {settings?.user.role === "admin" && <ReadinessChecklist />}
                 <div className="v2-dashboard-columns">
                   <section className="v2-card">
                     <header>
@@ -1063,7 +1069,7 @@ export default function Workspace() {
                                     );
                                     await refreshDetail();
                                     notify(
-                                      "已整理；没有可用模型时不会生成进度建议",
+                                      "已整理最新真实沟通，请核对建议；自动模式仅处理无事实变更的下一步",
                                     );
                                   } catch (e) {
                                     notify((e as Error).message);
@@ -1072,6 +1078,46 @@ export default function Workspace() {
                               >
                                 AI 整理最新进度
                               </button>
+                              {(() => {
+                                const latest = detail.messages
+                                  .filter(
+                                    (m) =>
+                                      Number(m.project_id) === project.id &&
+                                      m.channel !== "note" &&
+                                      (m.direction === "inbound" ||
+                                        [
+                                          "accepted",
+                                          "delivered",
+                                          "read",
+                                          "synced",
+                                          "manual_sent",
+                                          "confirmed_sent",
+                                        ].includes(m.send_status)),
+                                  )
+                                  .sort(
+                                    (a, b) =>
+                                      Date.parse(b.occurred_at) -
+                                        Date.parse(a.occurred_at) ||
+                                      b.id - a.id,
+                                  )[0];
+                                if (!latest)
+                                  return (
+                                    <p className="v2-muted">
+                                      暂无可分析的真实沟通，草稿不用于推进客户进度。
+                                    </p>
+                                  );
+                                return (
+                                  <p role="status" className="v2-muted">
+                                    {latest.progress_state === "failed"
+                                      ? `进度整理失败：${latest.progress_error}。可点击上方按钮重试。`
+                                      : ["queued", "processing"].includes(
+                                            latest.progress_state,
+                                          )
+                                        ? "最新沟通正在等待／进行 AI 整理；需启用分析模型。"
+                                        : "AI 只建议下一步，不会自动确认客户已付款或已成交。"}
+                                  </p>
+                                );
+                              })()}
                               <ProjectForm
                                 key={`${project.id}-${project.updated_at}`}
                                 project={project}
@@ -1090,6 +1136,7 @@ export default function Workspace() {
                             <div className="v2-memories">
                               {settings?.user.role === "admin" && (
                                 <CustomerAccess
+                                  key={detail.customer.id}
                                   customerId={detail.customer.id}
                                   onNotify={notify}
                                 />
@@ -1805,8 +1852,32 @@ function ProjectForm({
         下一步
         <textarea name="next_action" rows={3} defaultValue={p.next_action} />
       </label>
+      <div className="v2-form-grid">
+        <label>
+          新消息进度处理
+          <select
+            name="auto_progress"
+            defaultValue={String(p.auto_progress || 0)}
+            disabled={!canWrite}
+          >
+            <option value="0">建议由我确认（默认）</option>
+            <option value="1">无事实变更时自动更新下一步</option>
+          </select>
+        </label>
+        <label>
+          等待客户时，几天后跟进
+          <input
+            name="follow_up_days"
+            type="number"
+            min={0}
+            max={90}
+            defaultValue={p.follow_up_days ?? 3}
+            disabled={!canWrite}
+          />
+        </label>
+      </div>
       <p className="v2-muted">
-        这里保存的是你确认后的进度，AI 的推测不会静默覆盖。
+        自动模式需要分析模型，只更新无冲突的等待方和下一步。型号、数量、目的地的新增或变更仍需确认；不会自动标记成交或付款。0天表示不自动设置跟进日期。
       </p>
       <button className="v2-button primary" disabled={!canWrite}>
         保存项目进度

@@ -37,7 +37,7 @@ export default function ProgressSuggestion({
       if (!r.ok) throw new Error(d.error);
       onNotify(
         type === "apply"
-          ? "已确认并更新项目，旧跟进日期已清除，请设置新的日期"
+          ? "已更新项目；跟进日期已按等待方保留或计算，请核对"
           : "已忽略此建议",
       );
       onRefresh();
