@@ -4,7 +4,7 @@ import test from "node:test";
 
 test("ships the requested CRM workflows", async () => {
   const [page, providers, knowledge, auth, backup, deploy] = await Promise.all([
-    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/legacy-ui.tsx", import.meta.url), "utf8"),
     readFile(new URL("../lib/ai.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/knowledge.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/auth.ts", import.meta.url), "utf8"),

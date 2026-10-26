@@ -7,6 +7,8 @@ export type ProviderConfig = { id?: number; name: string; providerKey: string; a
 export type AiMessage = { role: "system" | "user" | "assistant"; content: string };
 
 export const providerPresets = [
+  { key: "anthropic", name: "Anthropic Claude", apiStyle: "chat" as const, baseUrl: "https://api.anthropic.com/v1", model: "", keyRequired: true, note: "原生 Anthropic 协议；填写账号可用模型，不经 OpenAI 兼容网关" },
+  { key: "gemini", name: "Google Gemini", apiStyle: "chat" as const, baseUrl: "https://generativelanguage.googleapis.com/v1beta", model: "", keyRequired: true, note: "原生 Google 协议；填写账号可用的模型" },
   { key: "openai", name: "OpenAI", apiStyle: "responses" as const, baseUrl: "https://api.openai.com/v1", model: "gpt-5.6-terra", keyRequired: true, note: "适合高质量客户分析与英文商务回复" },
   { key: "deepseek", name: "DeepSeek 深度求索", apiStyle: "chat" as const, baseUrl: "https://api.deepseek.com", model: "deepseek-v4-flash", keyRequired: true, note: "国产模型，支持 OpenAI Chat Completions 协议" },
   { key: "qwen", name: "通义千问 Qwen", apiStyle: "chat" as const, baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1", model: "qwen3.7-plus", keyRequired: true, note: "阿里云百炼国内节点；也可填写工作空间专属地址" },
@@ -28,8 +30,18 @@ export function activeProvider(): ProviderConfig | null {
   return { id: Number(row.id), name: String(row.name), providerKey: String(row.provider_key), apiStyle: row.api_style as ApiStyle, baseUrl: String(row.base_url), model: String(row.model), apiKey: decryptSecret(String(row.api_key_cipher || "")) };
 }
 
+export function providerFor(task:"chat"|"analysis"|"translation"|"vision"){
+  const route=getDb().prepare("SELECT p.* FROM ai_task_routes r JOIN ai_providers p ON p.id=r.provider_id WHERE r.task=?").get(task) as Record<string,string|number>|undefined;
+  if(!route)return activeProvider();if(!route.enabled)throw new Error(`为${task}配置的模型已停用，请调整任务分工；未自动转交其他服务商`);
+  return{id:Number(route.id),name:String(route.name),providerKey:String(route.provider_key),apiStyle:route.api_style as ApiStyle,baseUrl:String(route.base_url),model:String(route.model),apiKey:decryptSecret(String(route.api_key_cipher||""))};
+}
+
 export async function callModel(config: ProviderConfig, messages: AiMessage[], options?: { json?: boolean; maxTokens?: number; timeoutMs?: number }) {
   validateProvider(config);
+  if(["anthropic","gemini"].includes(config.providerKey)){
+    const {generateText}=await import("ai");const {sdkModel}=await import("./model");
+    const result=await generateText({model:sdkModel(config),messages,maxOutputTokens:options?.maxTokens||3500,maxRetries:0,abortSignal:AbortSignal.timeout(options?.timeoutMs||90000)});return result.text;
+  }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), options?.timeoutMs || 90_000);
   try {
@@ -37,7 +49,7 @@ export async function callModel(config: ProviderConfig, messages: AiMessage[], o
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (config.apiKey) headers.Authorization = `Bearer ${config.apiKey}`;
     const body = config.apiStyle === "responses"
-      ? { model: config.model, input: messages, max_output_tokens: options?.maxTokens || 3500 }
+      ? { model: config.model, input: messages,store:false, max_output_tokens: options?.maxTokens || 3500 }
       : { model: config.model, messages, max_tokens: options?.maxTokens || 3500, ...(options?.json ? { response_format: { type: "json_object" } } : {}) };
     const response = await fetch(endpoint, { method: "POST", headers, body: JSON.stringify(body), signal: controller.signal });
     const raw = await response.text();
@@ -71,7 +83,7 @@ export function extractJson<T>(text: string): T {
   }
 }
 
-function validateProvider(config: ProviderConfig) {
+export function validateProvider(config: ProviderConfig) {
   if (!config.model.trim() || config.model.includes("请填写")) throw new Error("请填写有效的模型名称或接入点 ID");
   let url: URL;
   try { url = new URL(config.baseUrl); } catch { throw new Error("API 地址格式不正确"); }

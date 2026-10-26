@@ -45,6 +45,13 @@ export function decryptSecret(value: string) {
   return Buffer.concat([decipher.update(Buffer.from(encrypted64, "base64")), decipher.final()]).toString("utf8");
 }
 
+// Protect the first-admin bootstrap without exposing the deployment token or comparison length.
+export function validSetupToken(value: string, expected = process.env.SETUP_TOKEN || "") {
+  if (!expected) return true;
+  const digest = (text: string) => createHash("sha256").update(text).digest();
+  return value.length <= 1024 && timingSafeEqual(digest(value), digest(expected));
+}
+
 export function validatePassword(password: string) {
   if (password.length < 10) return "密码至少需要10位";
   if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) return "密码需同时包含字母和数字";

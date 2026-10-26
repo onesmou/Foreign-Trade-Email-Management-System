@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">RehabIntl CRM</string>
+    <string name="connecting_status">正在连接 wmcrm.jbenlz.com…</string>
+    <string name="connected_status">wmcrm.jbenlz.com · HTTPS</string>
+</resources>

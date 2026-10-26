@@ -1,0 +1,15 @@
+<svg width="390" height="96" viewBox="0 0 390 96" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">RehabIntl compact logo hybrid concept</title>
+  <desc id="desc">Compact no-space brand name option using the R brand mark and global supplier tagline.</desc>
+  <g transform="translate(18 14)">
+    <rect x="0" y="0" width="68" height="68" rx="14" fill="#0B7468"/>
+    <path d="M21 50V18H38C47 18 53 23 53 31C53 39 47 44 38 44H29" stroke="white" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M38 44L53 58" stroke="white" stroke-width="6" stroke-linecap="round"/>
+    <path d="M14 50C26 59 46 59 58 45" stroke="#E5C979" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="57" cy="18" r="5" fill="#C95D45"/>
+  </g>
+  <g transform="translate(102 24)">
+    <text x="0" y="24" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700" fill="#172326" letter-spacing="0">RehabIntl</text>
+    <text x="1" y="50" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" fill="#5B6769" letter-spacing="1.6">GLOBAL REHAB EQUIPMENT SUPPLIER</text>
+  </g>
+</svg>

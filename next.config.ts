@@ -2,7 +2,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  serverExternalPackages: ["adm-zip", "mammoth", "pdf-parse"],
+  outputFileTracingExcludes: {"/*":["./data/**/*","./tmp/**/*","./output/**/*","./outputs/**/*","./work/**/*","./research/**/*","./release/**/*","./.git/**/*"]},
+  serverExternalPackages: ["adm-zip", "mammoth", "pdf-parse", "@whiskeysockets/baileys", "pino"],
   experimental: {
     serverActions: { bodySizeLimit: "25mb" },
   },

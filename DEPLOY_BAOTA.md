@@ -1,110 +1,124 @@
-# 询盘客户管理系统：宝塔部署说明
+# 宝塔部署说明（Docker 推荐）
 
-## 一、服务器准备
+适用于全新安装；升级或迁移已有数据先看后面的备份章节。示例域名为 `crm.example.com`，替换成你自己的CRM域名。不要替换同服务器的其他项目。
 
-- 建议使用 Ubuntu 22.04/24.04 或 Debian 12。
-- 宝塔安装：Nginx、Node.js 版本管理器、PM2 管理器。
-- Node.js 使用 **22.13 或更高版本**。
-- 给系统准备一个独立域名，例如 `crm.example.com`，并提前解析到服务器。
+## 一、准备
 
-## 二、上传与安装
+1. 域名解析到服务器公网IP。
+2. 宝塔中安装Nginx和Docker，确认Docker服务运行。宿主机不用安装新版Node，容器自带Node22。建议现代Ubuntu/Debian；旧系统还需Docker和内核本身兼容。
+3. 服务器放行80/443；不要向公网开放3011。确保服务器可以访问GitHub、Docker镜像源和你选用的模型服务。WhatsApp还需要对应网络可达。
+4. 准备独立目录，不上传本机客户库、`.env`、授权或Android签名文件。全新线上安装没有默认账号。
 
-1. 把项目上传到独立目录，例如 `/www/wwwroot/rehabintl-crm`。
-2. 不要上传本机的 `node_modules`、`.next`、`.git`、`.npm-cache` 和 `data` 中的实际业务数据。
-3. 在项目目录执行：
+## 二、下载代码
 
-   ```bash
-   npm ci
-   npm run build
-   ```
+在宝塔终端逐行执行（目录不存在时才clone）：
 
-4. 复制 `.env.example` 为 `.env`，至少修改：
+```bash
+git clone https://github.com/onesmou/Foreign-Trade-Email-Management-System.git /www/wwwroot/foreign-trade-crm
+cd /www/wwwroot/foreign-trade-crm
+docker compose build
+```
 
-   ```env
-   DATA_DIR=/www/wwwroot/rehabintl-crm/data
-   APP_URL=https://crm.example.com
-   APP_SECRET=请填写至少32位随机字符串
-   ALLOW_LOCAL_AI=0
-   INBOUND_EMAIL_SECRET=如不使用邮件入站接口可留空
-   BACKUP_PASSPHRASE=请设置至少12位且包含字母和数字的独立备份密码
-   BACKUP_RETENTION_DAYS=30
-   BACKUP_RETENTION_COUNT=30
-   BACKUP_COPY_DIR=/mnt/backup/rehabintl-crm
-   ```
+如果服务器无法访问GitHub：在GitHub下载源码ZIP，通过宝塔上传并解压到独立目录；确认该目录直接有`Dockerfile`、`compose.yaml`、`package.json`，再执行构建。不要上传`node_modules`、`.next`或业务`data`。不要用不可信镜像或关闭TLS校验解决下载失败。
 
-5. 确认 `data` 目录可由运行 Node.js 的用户写入。这里保存客户、询盘、用户和加密后的 AI 配置，必须定期备份。
+## 三、生成配置并启动
 
-## 三、在宝塔启动
+仍在项目目录执行（`foreign-trade-crm:v2`是compose.yaml中的镜像名）：
 
-在“Node 项目”中新建项目：
+```bash
+docker run --rm --network none --user 0:0 -v "$PWD:/config" -w /config --entrypoint node foreign-trade-crm:v2 /app/scripts/init-env.mjs --url https://crm.example.com
+docker compose up -d
+docker compose ps
+docker compose logs --tail=30 crm
+curl http://127.0.0.1:3011/api/auth/setup
+```
 
-- 项目目录：`/www/wwwroot/rehabintl-crm`
-- 启动方式：`npm`
-- 启动命令：`npm run start:bt`
-- 端口：`3011`（避免与其他本地项目共用 3000 导致预览串项目）
-- Node 版本：22.13+
-- 运行用户：建议使用普通网站用户，不要使用 root
+初始化脚本只创建全新`.env`，遇到已存在的文件会拒绝覆盖。它生成独立应用密钥、备份密码和`SETUP_TOKEN`，不在日志输出密钥。最后的接口应返回`needsSetup:true`和`requiresSetupToken:true`；这表示程序启动了，尚需创建管理员。
 
-也可以用项目自带的 `ecosystem.config.cjs` 交给 PM2 启动。应用只监听 `127.0.0.1:3011`，不应把 3011 端口直接暴露到公网。
+在宝塔文件编辑器中私下查看`.env`，保存其中`SETUP_TOKEN`和`BACKUP_PASSPHRASE`；首次注册时需要前者，恢复备份需要后者。不要把它们发到GitHub、公开日志或截图中。APP_URL必须是实际HTTPS域名。
 
-## 四、Nginx 与 HTTPS
+只有`docker-compose`旧命令时，把文档中的`docker compose`改为`docker-compose`。默认使用持久化命名卷`crm-data`（Docker会加项目名前缀），保存数据库、上传文件及授权；不要执行`down -v`，不要随意更换Compose项目名或改成空卷。
 
-在宝塔网站设置中添加反向代理，把域名转发到 `http://127.0.0.1:3011`，然后申请并强制开启 HTTPS。Nginx 站点配置中建议加入：
+## 四、给域名单独建站点
+
+1. 宝塔 → 网站 → 添加独立站点/反向代理，域名填`crm.example.com`。不要把CRM域名加到别的项目上。
+2. 代理目标填`http://127.0.0.1:3011`，保留原始Host。
+3. 只给这个域名申请并部署有效SSL证书，按面板要求由你确认服务条款/验证域名，再开启HTTPS。不能沿用其他站点的证书。
+4. 在该站点的反向代理location设置以下选项（由面板生成的重复项不要重复添加）：
 
 ```nginx
 client_max_body_size 600m;
 proxy_read_timeout 180s;
 proxy_send_timeout 180s;
+proxy_buffering off;
+proxy_request_buffering off;
 proxy_set_header Host $host;
 proxy_set_header X-Real-IP $remote_addr;
 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 proxy_set_header X-Forwarded-Proto $scheme;
 ```
 
-## 五、第一次使用
+修改后先检查Nginx配置，再重载。浏览器访问应是CRM，不是其他默认站点；证书应包含CRM域名，不应出现安全警告。不要通过关闭证书校验来使用系统。
 
-1. 浏览器打开 `https://crm.example.com/setup`。
-2. 创建第一个管理员账号；初始化完成后该页面不能再次创建管理员。
-3. 登录后打开“系统配置 → AI 模型”。
-4. 选择 DeepSeek、通义千问、Kimi、豆包、OpenAI 或自定义兼容接口，填写 API Key，先点“测试连接”，成功后保存并启用。
-5. 在“公司信息”填写公司资料，在“产品与公司资料库”上传产品文档、PDF、Word、Excel、图片说明或 Codex/Agent 项目 ZIP/文件夹。
+## 五、首次使用
 
-## 六、自动加密备份
+1. 打开`https://crm.example.com/setup`。
+2. 输入`.env`中的初始化验证码，自己设置管理员邮箱和密码。创建后开放初始化关闭，没有默认线上密码。
+3. 在设置填写公司/品牌/签名，添加AI API并测试。测试可能计费，ChatGPT/Codex订阅不等于API额度。
+4. 上传公司和产品资料，再录入一封询盘。具体操作见[用户指南](docs/USER_GUIDE.md)。
+5. 使用WhatsApp前阅读非官方接入风险，在手机“已关联设备”扫码，不要对真实客户发测试消息。
 
-系统生成的 `.ricrmbak` 文件包含数据库、客户邮件、用户、AI配置、上传资料、`data/.app-secret` 和服务器 `.env`，整个文件使用独立备份密码加密。数据库通过 SQLite `VACUUM INTO` 在线生成一致性快照，不直接复制运行中的 WAL 数据库。
+## 六、网络与WhatsApp代理
 
-1. 在 `.env` 设置 `BACKUP_PASSPHRASE`。请把密码保存在公司密码管理器中；丢失后无法解密备份。
-2. 如果服务器挂载了另一块磁盘或 NAS，把路径填入 `BACKUP_COPY_DIR`。不填写时只保存在 `data/backups/`，无法防范整台服务器磁盘损坏。
-3. 在项目目录手动验证：
+默认`WA_PROXY_URL`留空时使用已配置的系统代理。可填可达的HTTP/HTTPS/SOCKS代理，或`direct`强制直连；更改后执行`docker compose up -d`重建服务配置。
 
-   ```bash
-   npm run backup
-   ```
+Docker中的`127.0.0.1`是容器自己，不是你的电脑，也不自动等于服务器宿主机。不要照抄本机Clash端口；服务器必须有它实际可访问的代理。不要在公开README或日志里放代理账号密码。
 
-4. 在宝塔“计划任务 → Shell脚本”中新增每日任务，例如每天凌晨02:30执行：
+## 七、备份与恢复
 
-   ```bash
-   cd /www/wwwroot/rehabintl-crm && npm run backup >> /www/wwwlogs/rehabintl-crm-backup.log 2>&1
-   ```
+管理员在设置生成并下载`.ricrmbak`加密备份，密码独立保存。备份包含SQLite一致性快照、私有上传文件和解密所需配置/应用密钥；数据库、头像和聊天图片一起保留。GitHub代码不包含这些数据。
 
-5. 计划任务必须使用与Node项目相同的网站用户运行，并确保该用户可写 `DATA_DIR`、`data/backups/` 和 `BACKUP_COPY_DIR`，否则会出现权限错误。
-6. 如果计划任务提示找不到 `npm`，在宝塔Node项目终端运行 `which npm`，把上面命令中的 `npm` 替换成返回的完整路径。
-7. 建议另外使用宝塔对象存储、云存储插件或挂载NAS，把加密后的 `.ricrmbak` 文件异地保存。
+容器中手动备份：
 
-保留规则由 `BACKUP_RETENTION_DAYS` 和 `BACKUP_RETENTION_COUNT` 同时控制，默认保留30天且最多30份，至少始终保留最新一份。
+```bash
+docker compose exec -T crm node scripts/backup.mjs
+```
 
-## 七、恢复与回滚
+可将上面命令加到宝塔每日计划任务，但必须先手动验证成功，并异地下载/保存备份。仅存在同服务器的数据卷里，不能防范整机磁盘损坏。默认保留30天且最多30份。
 
-1. 登录管理员账号，打开“系统配置 → 备份恢复”。
-2. 上传 `.ricrmbak` 文件，输入创建备份时使用的密码，并输入“确认恢复”。
-3. 系统只会先完成解密、路径检查、数据库结构检查和完整性校验，不会立即覆盖运行中的数据。
-4. 验证成功后，立即在宝塔中重启Node项目。恢复会在数据库打开前完成。
-5. 恢复前数据会保留在 `data/recovery-before-restore-日期时间/`，确认恢复结果无误后再人工清理。
-6. 备份里的 `.env` 会恢复为 `data/.env.restore`，不会自动覆盖服务器当前 `.env`。如迁移到新服务器，请人工比较后配置，尤其是自定义 `APP_SECRET`。
-7. 超过512MB的备份请上传到服务器后执行 `npm run restore -- /备份文件绝对路径/backup-xxx.ricrmbak`，验证成功后再重启Node项目。
+网页恢复：管理员上传备份、输入备份密码和确认文字，验证暂存成功后执行：
 
-## 八、升级注意事项
+```bash
+docker compose restart crm
+```
 
-- 升级前先在管理界面下载一份加密备份，再替换程序文件，执行 `npm ci && npm run build`，最后重启项目。
-- API Key 使用应用密钥加密；丢失 `APP_SECRET` 或 `data/.app-secret` 后，已保存的 API Key 无法解密。
-- 不要把 `.env`、数据库、API Key、客户邮件、上传资料或 `.ricrmbak` 文件提交到GitHub。
+恢复前数据保留回滚副本。备份里的`.env`恢复为数据目录内`.env.restore`，不会自动覆盖当前服务器配置；迁移时人工核对APP_SECRET，不能随意生成新密钥覆盖旧密钥。超过网页限制的大备份可通过私有渠道放到服务器，再使用`scripts/restore.mjs`验证/暂存后重启。
+
+## 八、升级，不重建业务数据
+
+先生成并下载加密备份，在原项目目录更新源码、保持同一`.env`和数据卷：
+
+```bash
+git pull --ff-only
+docker compose build
+docker compose up -d
+docker compose ps
+```
+
+ZIP安装则在备份后只替换源码，保留`.env`和原数据卷。数据库采用增量迁移，升级不需要删库。不要执行`docker compose down -v`、删除数据目录或把本机演示库覆盖到线上。
+
+## 九、常见问题
+
+| 现象 | 先检查 |
+| --- | --- |
+| 域名打开别的系统 | CRM域名单独的80/443站点、server_name、反代目标、证书；没有匹配站点可能落到默认网站 |
+| 502 | `docker compose ps`和容器日志，本机3011是否响应 |
+| 初次注册提示验证码错误 | 使用当前服务器.env的SETUP_TOKEN，不是API Key或备份密码 |
+| AI流式内容等最后才出现 | Nginx是否关闭proxy_buffering，超时是否足够 |
+| 手机回复/附件没有同步 | WhatsApp连接、服务器网络、身份关联和平台实际下发范围；媒体可能过期 |
+| 宿主机Node报GLIBC错误 | 优先Docker运行；不要在旧系统强行替换系统glibc |
+| 更新后像空系统 | 是否误换了Compose项目名、数据卷或DATA_DIR；先找原数据，不要重置账号 |
+
+## 可选：不使用Docker
+
+现代Linux可用Node22.13+，配置`.env`、`npm ci`、`npm run build`，以普通网站用户运行`npm run start:bt`（127.0.0.1:3011）或项目PM2配置；同样需要独立站点、HTTPS、SETUP_TOKEN和数据备份。生产环境不运行`npm run dev`或演示命令。

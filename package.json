@@ -1,27 +1,48 @@
 {
   "name": "rehabintl-inquiry-crm",
-  "version": "1.1.0",
+  "version": "2.0.0",
+  "license": "MIT",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
   },
   "scripts": {
-    "dev": "next dev -H 0.0.0.0 -p 3011",
+    "dev": "next dev -H 127.0.0.1 -p 3011",
     "build": "next build",
     "start": "next start -H 0.0.0.0 -p 3011",
     "test": "npm run build && node --test tests/*.test.mjs",
     "lint": "eslint . --ignore-pattern .next",
     "start:bt": "next start -H 127.0.0.1 -p 3011",
     "backup": "node --experimental-strip-types scripts/backup.mjs",
-    "restore": "node --experimental-strip-types scripts/restore.mjs"
+    "restore": "node --experimental-strip-types scripts/restore.mjs",
+    "preview": "node scripts/preview.mjs"
   },
   "dependencies": {
-    "adm-zip": "0.6.0",
+    "@ai-sdk/anthropic": "4.0.87",
+    "@ai-sdk/google": "4.0.104",
+    "@ai-sdk/openai": "4.0.101",
+    "@ai-sdk/openai-compatible": "3.0.77",
+    "@types/qrcode": "1.5.6",
+    "@whiskeysockets/baileys": "7.0.0-rc14",
+    "adm-zip": "0.6.1",
+    "ai": "7.0.152",
+    "csv-parse": "7.0.3",
+    "https-proxy-agent": "9.1.0",
+    "lucide-react": "1.61.0",
     "mammoth": "1.12.0",
-    "next": "16.2.12",
+    "next": "16.4.3",
     "pdf-parse": "1.1.1",
+    "pino": "10.4.0",
+    "qrcode": "1.5.4",
     "react": "19.2.6",
-    "react-dom": "19.2.6"
+    "react-dom": "19.2.6",
+    "react-markdown": "10.1.0",
+    "react-resizable-panels": "4.15.0",
+    "sharp": "0.35.5",
+    "socks-proxy-agent": "10.1.0",
+    "socks": "2.8.10",
+    "undici": "7.30.1",
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.2.1",
@@ -29,13 +50,16 @@
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "eslint": "9.39.4",
-    "eslint-config-next": "16.2.6",
+    "eslint-config-next": "16.4.3",
+    "prettier": "3.9.10",
     "tailwindcss": "4.2.1",
     "typescript": "5.9.3"
   },
   "overrides": {
-    "postcss": "8.5.18",
-    "sharp": "0.35.0"
+    "postcss": "8.5.31",
+    "sharp": "0.35.5",
+    "@xmldom/xmldom": "^0.9.8",
+    "source-map-js": "^1.2.2"
   },
   "type": "module"
 }

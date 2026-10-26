@@ -1,0 +1,33 @@
+services:
+  crm:
+    build: .
+    image: foreign-trade-crm:v2
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3011:3011"
+    environment:
+      APP_URL: ${APP_URL:-http://localhost:3011}
+      DATA_DIR: /app/data
+      APP_SECRET: ${APP_SECRET:-}
+      SETUP_TOKEN: ${SETUP_TOKEN:-}
+      ALLOW_LOCAL_AI: ${ALLOW_LOCAL_AI:-0}
+      WA_PROXY_URL: ${WA_PROXY_URL:-}
+      INBOUND_EMAIL_SECRET: ${INBOUND_EMAIL_SECRET:-}
+      BACKUP_PASSPHRASE: ${BACKUP_PASSPHRASE:-}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
+      BACKUP_RETENTION_COUNT: ${BACKUP_RETENTION_COUNT:-30}
+    volumes:
+      - crm-data:/app/data
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3011/api/auth/setup').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+volumes:
+  crm-data:

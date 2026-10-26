@@ -1,5 +1,5 @@
 import { assertSameOrigin, requireApiUser } from "../../../lib/auth";
-import { createEncryptedBackup, listBackups, pruneBackups, resolveBackupPath } from "../../../lib/backup-core";
+import { backupEnvironment,createEncryptedBackup, listBackups, pruneBackups, resolveBackupPath } from "../../../lib/backup-core";
 import { audit, dataDirectory } from "../../../lib/db";
 import { unlinkSync } from "node:fs";
 import { existsSync, readFileSync } from "node:fs";
@@ -25,7 +25,7 @@ export async function POST(request: Request) {
     const data = await request.json() as { passphrase?: string };
     const envFile = path.join(/*turbopackIgnore: true*/ process.cwd(), ".env");
     const backup = await createEncryptedBackup({
-      dataDir: dataDirectory(), passphrase: data.passphrase || "", envContents: existsSync(envFile) ? readFileSync(envFile, "utf8") : "",
+      dataDir: dataDirectory(), passphrase: data.passphrase || "", envContents: backupEnvironment(existsSync(envFile) ? readFileSync(envFile, "utf8") : ""),
       retentionDays: Number(process.env.BACKUP_RETENTION_DAYS || 30), retentionCount: Number(process.env.BACKUP_RETENTION_COUNT || 30),
     });
     audit(auth.user.id, "创建加密备份", "backup", backup.id, `${backup.size} bytes`);

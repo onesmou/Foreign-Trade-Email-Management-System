@@ -1,6 +1,7 @@
 import { assertSameOrigin, requireApiUser } from "../../../lib/auth";
 import { audit, getDb } from "../../../lib/db";
 import { parseRawEmail } from "../../../lib/email";
+import {accessSql,customerFor} from "../../../lib/crm";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,7 +14,7 @@ const selectSql = `SELECT i.*,c.name,c.email,c.company,c.country,c.phone,c.custo
 
 export async function GET() {
   const auth = await requireApiUser(); if (!auth.user) return auth.response;
-  const rows = getDb().prepare(`${selectSql} ORDER BY datetime(i.received_at) DESC,i.id DESC`).all();
+  const rows = getDb().prepare(`${selectSql} WHERE ${accessSql(auth.user)} ORDER BY datetime(i.received_at) DESC,i.id DESC`).all();
   return Response.json({ inquiries: rows });
 }
 
@@ -29,6 +30,8 @@ export async function POST(request: Request) {
     if (!email || !/^\S+@\S+\.\S+$/.test(email)) return Response.json({ error: "没有识别到有效客户邮箱，请在邮件全文中保留发件人信息" }, { status: 400 });
     if (!body) return Response.json({ error: "没有识别到邮件正文" }, { status: 400 });
     const db = getDb();
+    const prior=db.prepare("SELECT id FROM customers WHERE email=?").get(email) as {id:number}|undefined;
+    if(prior)customerFor(auth.user,prior.id);
     db.prepare(`INSERT INTO customers (name,email,company,country,phone,owner_id) VALUES (?,?,?,?,?,?)
       ON CONFLICT(email) DO UPDATE SET name=COALESCE(NULLIF(excluded.name,''),name),company=COALESCE(NULLIF(excluded.company,''),company),country=COALESCE(NULLIF(excluded.country,''),country),phone=COALESCE(NULLIF(excluded.phone,''),phone),updated_at=CURRENT_TIMESTAMP`)
       .run(data.name || parsed.name, email, data.company || parsed.company, data.country || parsed.country, data.phone || parsed.phone, auth.user.id);
@@ -47,6 +50,8 @@ export async function PATCH(request: Request) {
     assertSameOrigin(request);
     const data = await request.json() as { id?: number; status?: string };
     const id = Number(data.id); if (!id) return Response.json({ error: "询盘ID无效" }, { status: 400 });
+    const inquiry=getDb().prepare("SELECT customer_id FROM inquiries WHERE id=?").get(id) as {customer_id:number}|undefined;
+    if(!inquiry)throw new Error("询盘不存在");customerFor(auth.user,inquiry.customer_id);
     const allowed = ["待分析", "待回复", "草稿完成", "已回复", "已归档"];
     if (data.status && allowed.includes(data.status)) getDb().prepare("UPDATE inquiries SET status=?,updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(data.status, auth.user.id, id);
     const row = getDb().prepare(`${selectSql} WHERE i.id=?`).get(id);

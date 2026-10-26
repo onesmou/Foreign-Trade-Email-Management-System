@@ -4,7 +4,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
-import { applyPendingRestore, createEncryptedBackup, listBackups, stageEncryptedRestore } from "../lib/backup-core.ts";
+import { backupEnvironment,applyPendingRestore, createEncryptedBackup, listBackups, stageEncryptedRestore } from "../lib/backup-core.ts";
+
+test("captures Docker's effective encryption secret without serializing unrelated environment",()=>{
+  const value=backupEnvironment("APP_URL=https://old.example",{APP_SECRET:"DockerSecretForTestOnly",APP_URL:"https://new.example",UNRELATED_TOKEN:"never-copy"});
+  assert.match(value,/APP_SECRET="DockerSecretForTestOnly"/);assert.match(value,/APP_URL="https:\/\/new.example"/);assert.doesNotMatch(value,/UNRELATED_TOKEN|never-copy/);
+});
 
 test("creates an encrypted SQLite snapshot and restores it with a rollback copy", async () => {
   const root = mkdtempSync(path.join(tmpdir(), "rehab-crm-backup-"));

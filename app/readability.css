@@ -1,0 +1,298 @@
+/* Shared reading hierarchy. Keep pane sizing, resize handles and stored layouts intact. */
+.crm-v2 {
+  --v2-ink: #202e29;
+  --v2-muted: #53645c;
+  --v2-line: #d4ded8;
+  --v2-green: #17674f;
+  --v2-soft: #eef5f1;
+  font-family:
+    "Segoe UI",
+    -apple-system,
+    BlinkMacSystemFont,
+    "PingFang SC",
+    "Microsoft YaHei",
+    ui-sans-serif,
+    system-ui,
+    sans-serif;
+  font-size: 15px;
+  line-height: 1.65;
+  background: #f3f6f4;
+}
+.crm-v2 :is(input, textarea)::placeholder {
+  color: #53645c;
+  opacity: 1;
+}
+.crm-v2 :is(input, textarea, select) {
+  color: var(--v2-ink);
+}
+.crm-v2 .v2-topbar h1 {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+.crm-v2 .v2-topbar small {
+  letter-spacing: 0;
+}
+.crm-v2 .v2-sidebar nav button {
+  color: #485e53;
+  font-size: 15px;
+  font-weight: 500;
+}
+.crm-v2 .v2-sidebar nav button.active {
+  color: #14533f;
+  font-weight: 650;
+  background: #e5f0e9;
+}
+.crm-v2 .v2-list-heading,
+.crm-v2 .v2-ai-panel > header {
+  background: #f4f7f5;
+  border-bottom: 1px solid var(--v2-line);
+}
+.crm-v2 .v2-list-heading {
+  padding-top: 20px;
+}
+.crm-v2 :is(.v2-list-heading h2, .v2-ai-panel h2, .v2-card > header h3) {
+  font-size: 16px;
+  font-weight: 650;
+  color: #203c2e;
+}
+.crm-v2 .v2-ai-panel > header > small {
+  margin-left: 0;
+}
+.crm-v2 .v2-customer-item strong {
+  font-size: 15px;
+  font-weight: 600;
+}
+.crm-v2 .v2-customer-item.selected {
+  background: #e9f2ec;
+}
+.crm-v2 .v2-customer-item.selected::before {
+  width: 4px;
+  background: #246e50;
+}
+.crm-v2 .v2-customer-item footer {
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.crm-v2 .v2-detail-head h2 {
+  font-size: 21px;
+  font-weight: 650;
+  line-height: 1.4;
+}
+.crm-v2 .v2-contact-chips > * {
+  background: #eef3ef;
+  color: #41594b;
+}
+.crm-v2 .v2-detail-tabs button {
+  font-size: 14px;
+  padding-top: 4px;
+  font-weight: 500;
+  color: #53665b;
+}
+.crm-v2 .v2-detail-tabs button.active {
+  color: #145b42;
+  border-bottom-width: 3px;
+  font-weight: 650;
+}
+.crm-v2 .v2-next-step {
+  border-color: #c6dbcd;
+  background: #eef5f0;
+}
+.crm-v2 .v2-next-step strong {
+  color: #263f30;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.65;
+}
+.crm-v2 :is(.v2-detail-scroll, .v2-ai-scroll) {
+  background: #f7f9f7;
+}
+.crm-v2 .v2-message {
+  border-color: #d3ded6;
+  box-shadow: 0 1px 3px #203c2e06;
+}
+.crm-v2 .v2-message h4 {
+  font-size: 15px;
+  font-weight: 650;
+}
+.crm-v2
+  :is(
+    .v2-message > p,
+    .v2-translation p,
+    .v2-chat,
+    .imported-chat,
+    .wa-bubble > p
+  ) {
+  font-size: 15px;
+  color: var(--v2-ink);
+  line-height: 1.75;
+}
+.crm-v2 .v2-translation {
+  background: #edf4ef;
+  border-left: 3px solid #a7c7b4;
+  border-radius: 5px;
+}
+.crm-v2 .v2-chat.user {
+  border-color: #cbded1;
+  background: #eaf3ed;
+}
+.crm-v2 .v2-chat.assistant {
+  background: white;
+  border: 1px solid #d7e1da;
+  border-radius: 9px;
+  padding: 16px;
+}
+.crm-v2 .v2-chat :is(h1, h2, h3, h4) {
+  font-size: 16px;
+  font-weight: 650;
+  color: #1f402d;
+}
+.crm-v2 :is(.v2-chat > small, .v2-message > header) {
+  color: #53645c;
+  font-weight: 500;
+}
+.crm-v2 .v2-file-card strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+.crm-v2 .v2-file-card small {
+  font-size: 12px;
+  line-height: 1.55;
+  color: #53645c;
+}
+.crm-v2 .v2-ai-compose {
+  border-color: #b9cfc0;
+  box-shadow: 0 1px 5px #173c2c0a;
+}
+.crm-v2 .v2-ai-compose textarea {
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--v2-ink);
+}
+.crm-v2 .v2-ai-compose .v2-image-hint,
+.crm-v2 .v2-ai-compose small {
+  font-size: 12px;
+  color: #53645c;
+}
+.crm-v2 .v2-search:focus-within {
+  outline: 2px solid #398160;
+  outline-offset: 1px;
+}
+.crm-v2 .v2-column-separator {
+  background: #edf2ee;
+}
+.crm-v2 .v2-column-separator::before {
+  background: #b9ccbf;
+}
+.crm-v2 .v2-column-separator > svg {
+  color: #54765f;
+  opacity: 0.8;
+}
+.crm-v2 .v2-preview-banner {
+  color: #77521d;
+  background: #fff7e7;
+}
+
+/* Legacy settings are embedded in the new workspace: remove their old 8–11px text. */
+.crm-v2 .settings-panel {
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--v2-ink);
+}
+.crm-v2
+  .settings-panel
+  :is(p, label, input, textarea, select, .settings-tabs button) {
+  font-size: 14px;
+}
+.crm-v2
+  .settings-panel
+  :is(
+    h3,
+    .current-ai strong,
+    .preset-grid strong,
+    .provider-row strong,
+    .user-row strong,
+    .backup-list strong
+  ) {
+  font-size: 15px;
+  color: var(--v2-ink);
+}
+.crm-v2
+  .settings-panel
+  :is(
+    small,
+    .field-tip,
+    .preset-grid small,
+    .provider-row span,
+    .backup-overview > small
+  ) {
+  font-size: 12px;
+  color: #53645c;
+}
+.crm-v2
+  .settings-panel
+  :is(
+    .provider-row button,
+    .user-row button,
+    .backup-list button,
+    .backup-list a,
+    .logout-button,
+    .danger-button
+  ) {
+  font-size: 13px;
+}
+.crm-v2 .settings-panel .provider-row {
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.crm-v2 .settings-panel .settings-tabs {
+  flex-wrap: wrap;
+}
+.crm-v2 .settings-panel .settings-tabs button.active {
+  font-weight: 650;
+}
+.crm-v2 .v2-modal :is(label, p, textarea, input, select) {
+  font-size: 14px;
+}
+.crm-v2 :is(.wa-chat-list strong, .wa-chat-header strong) {
+  font-size: 15px;
+  font-weight: 600;
+}
+.crm-v2 .wa-translation p {
+  color: #2c4938;
+  font-size: 15px;
+}
+.crm-v2 .wa-media-link {
+  font-weight: 600;
+  color: #17674f;
+}
+
+@media (max-width: 760px) {
+  .crm-v2 .v2-topbar h1 {
+    font-size: 23px;
+  }
+  .crm-v2 .v2-detail-head h2 {
+    font-size: 19px;
+  }
+  .crm-v2 .v2-detail-tabs {
+    gap: 16px;
+  }
+  .crm-v2 .v2-next-step {
+    flex-wrap: wrap;
+  }
+  .crm-v2 .v2-next-step > div {
+    flex: 1 1 180px;
+  }
+  .crm-v2 .v2-project-select {
+    flex-wrap: wrap;
+  }
+  .crm-v2 .v2-project-select select {
+    flex-basis: 180px;
+  }
+  .crm-v2 .v2-ai-compose textarea {
+    font-size: 16px;
+  }
+  .crm-v2 .settings-panel :is(input, textarea, select) {
+    font-size: 16px;
+  }
+}

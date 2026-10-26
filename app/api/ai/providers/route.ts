@@ -19,6 +19,8 @@ export async function POST(request: Request) {
     const style = data.apiStyle === "responses" ? "responses" : "chat";
     let id = Number(data.id || 0);
     if (id) {
+      getDb().prepare("DELETE FROM provider_capabilities WHERE provider_id=?").run(id);
+      getDb().prepare("UPDATE ai_providers SET last_test_status='untested',last_test_message='' WHERE id=?").run(id);
       const cipher = data.apiKey ? encryptSecret(data.apiKey.trim()) : null;
       if (cipher) getDb().prepare(`UPDATE ai_providers SET name=?,provider_key=?,api_style=?,base_url=?,model=?,api_key_cipher=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`)
         .run(data.name.trim(), data.providerKey || "custom", style, data.baseUrl.trim().replace(/\/$/, ""), data.model.trim(), cipher, id);

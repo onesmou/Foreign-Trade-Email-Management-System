@@ -1,0 +1,26 @@
+{
+  "format": "crm-codex-migration-v1",
+  "source": {
+    "threadId": "00000000-0000-4000-8000-000000000099",
+    "title": "虚构示例客户的 Codex 对话",
+    "coverage": { "hasMore": false, "turns": 1, "visibleMessages": 2 }
+  },
+  "customer": {
+    "name": "Alice Example", "email": "alice@example.test",
+    "company": "Example Clinic", "country": "示例国家", "phone": ""
+  },
+  "project": { "title": "示例采购项目", "stage": "需求确认" },
+  "items": [
+    {
+      "id": "user-1", "turnId": "turn-1", "role": "user", "phase": "",
+      "body": "客户需要产品目录，请准备回复草稿，不要发送。",
+      "recordedAt": "2026-10-01T08:00:00Z"
+    },
+    {
+      "id": "assistant-1", "turnId": "turn-1", "role": "assistant", "phase": "final_answer",
+      "body": "草稿：Thank you for your inquiry. Please confirm the product category you need. 此条仅为草稿。",
+      "recordedAt": "2026-10-01T08:00:00Z"
+    }
+  ],
+  "messages": [], "memories": [], "files": []
+}

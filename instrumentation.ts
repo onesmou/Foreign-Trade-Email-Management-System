@@ -1,0 +1,1 @@
+export async function register(){if(process.env.NEXT_RUNTIME==="nodejs"){const {scheduleProcessing}=await import("./lib/knowledge");scheduleProcessing();const {resumeWhatsApp}=await import("./lib/whatsapp");void resumeWhatsApp();}}

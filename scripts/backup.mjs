@@ -1,6 +1,6 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync } from "node:fs";
 import path from "node:path";
-import { createEncryptedBackup } from "../lib/backup-core.ts";
+import { backupEnvironment,createEncryptedBackup } from "../lib/backup-core.ts";
 
 loadEnv(path.join(process.cwd(), ".env"));
 const passphrase = process.env.BACKUP_PASSPHRASE || "";
@@ -9,7 +9,7 @@ const dataDir = path.resolve(process.env.DATA_DIR || path.join(process.cwd(), "d
 const backup = await createEncryptedBackup({
   dataDir,
   passphrase,
-  envContents: existsSync(path.join(process.cwd(), ".env")) ? readFileSync(path.join(process.cwd(), ".env"), "utf8") : "",
+  envContents: backupEnvironment(existsSync(path.join(process.cwd(), ".env")) ? readFileSync(path.join(process.cwd(), ".env"), "utf8") : ""),
   retentionDays: Number(process.env.BACKUP_RETENTION_DAYS || 30),
   retentionCount: Number(process.env.BACKUP_RETENTION_COUNT || 30),
 });

@@ -42,9 +42,37 @@ next-env.d.ts
 /.wrangler/
 /outputs/
 /work/
+/output/
+/research/
+/tmp/
+*.ricrmbak
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.db
+*.zip
+*.tar
+*.tar.gz
+*.key
+.app-secret
+
+# Internal review notes may mention pilot customer details. Public guides live in docs/.
+/CRM*.md
+/Codex客户历史迁移-开发说明.md
 
 # self-hosted runtime data
 /data/*
 !/data/.gitkeep
 /release/
 /.npm-cache/
+
+# Android build outputs and private signing material (never publish).
+/android/.gradle/
+/android/**/build/
+/android/local.properties
+/android/.signing/
+/android/key.properties
+*.jks
+*.keystore
+*.apk
+*.aab

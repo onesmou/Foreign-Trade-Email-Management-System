@@ -3,6 +3,7 @@ import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { applyPendingRestore } from "./backup-core";
+import { migrateWorkspace } from "./workspace-schema";
 
 declare global {
   var __rehabCrmDb: DatabaseSync | undefined;
@@ -23,6 +24,7 @@ export function getDb() {
   db.exec("PRAGMA foreign_keys=ON");
   db.exec("PRAGMA busy_timeout=5000");
   migrate(db);
+  migrateWorkspace(db);
   global.__rehabCrmDb = db;
   return db;
 }
@@ -59,6 +61,12 @@ function migrate(db: DatabaseSync) {
       business_summary TEXT NOT NULL DEFAULT '',
       sales_rules TEXT NOT NULL DEFAULT '',
       reply_signature TEXT NOT NULL DEFAULT 'Best regards,\nRehabIntl Sales Team',
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS company_branding (
+      id INTEGER PRIMARY KEY CHECK(id=1),
+      logo BLOB NOT NULL,
+      sha256 TEXT NOT NULL,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE TABLE IF NOT EXISTS customers (
@@ -173,7 +181,7 @@ function migrate(db: DatabaseSync) {
       "RehabIntl", "RehabIntl", "support@rehabintl.com", "+8618506234569", "https://www.rehabintl.com/",
       "面向海外诊所、经销商、进口商、养老项目、儿童康复中心提供康复医疗设备。",
       "不得凭空承诺价格、库存、交期、认证、质保或技术参数；信息不足时先向客户提问；所有回复发送前必须人工确认。",
-      "Best regards,\nRehabIntl Sales Team",
+      "Kind regards,\n\nLiam Zhao\nSales Manager\nRehabIntl\nsupport@rehabintl.com\nWhatsApp: +86 185 0623 4569",
     );
   db.prepare("DELETE FROM sessions WHERE expires_at < datetime('now')").run();
   db.exec("PRAGMA optimize");

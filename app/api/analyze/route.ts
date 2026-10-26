@@ -2,6 +2,7 @@ import { assertSameOrigin, requireApiUser } from "../../../lib/auth";
 import { activeProvider, callModel, extractJson } from "../../../lib/ai";
 import { audit, getDb } from "../../../lib/db";
 import { retrieveKnowledge } from "../../../lib/knowledge";
+import {customerFor} from "../../../lib/crm";
 
 export const runtime = "nodejs";
 
@@ -16,8 +17,9 @@ export async function POST(request: Request) {
     const db = getDb();
     const inquiry = db.prepare(`SELECT i.*,c.name,c.email,c.company,c.country,c.customer_type,c.stage FROM inquiries i JOIN customers c ON c.id=i.customer_id WHERE i.id=?`).get(id) as Record<string, string | number> | undefined;
     if (!inquiry) return Response.json({ error: "询盘不存在" }, { status: 404 });
+    customerFor(auth.user,Number(inquiry.customer_id));
     const profile = db.prepare("SELECT * FROM company_profile WHERE id=1").get() as Record<string, string>;
-    const knowledge = retrieveKnowledge(`${inquiry.subject}\n${inquiry.body}`, 8);
+    const knowledge = retrieveKnowledge(`${inquiry.subject}\n${inquiry.body}`, 8,auth.user,Number(inquiry.customer_id));
     const provider = activeProvider();
     let analysis: Analysis; let mode = "本地规则";
     if (provider) { analysis = await analyzeWithProvider(provider, inquiry, profile, knowledge); mode = provider.name; }

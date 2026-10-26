@@ -10,7 +10,7 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) return null;
   const row = getDb().prepare(`SELECT u.id,u.name,u.email,u.role FROM sessions s
-    JOIN users u ON u.id=s.user_id WHERE s.id=? AND s.expires_at>datetime('now') AND u.status='active'`).get(token) as SessionUser | undefined;
+    JOIN users u ON u.id=s.user_id WHERE s.id=? AND datetime(s.expires_at)>datetime('now') AND u.status='active'`).get(token) as SessionUser | undefined;
   return row || null;
 }
 

@@ -13,6 +13,13 @@ const HEADER_BYTES = MAGIC.length + SALT_BYTES + IV_BYTES;
 const BACKUP_EXTENSION = ".ricrmbak";
 const REQUIRED_TABLES = ["users", "customers", "inquiries", "company_profile", "ai_providers", "knowledge_files"];
 
+// Docker injects secrets as environment variables rather than a physical .env file.
+// Include the effective encryption secret only inside the encrypted backup payload.
+export function backupEnvironment(fileContents = "", env: Record<string,string|undefined> = process.env) {
+  const keys=["APP_SECRET","APP_URL","ALLOW_LOCAL_AI","INBOUND_EMAIL_SECRET","WA_PROXY_URL"];
+  return [fileContents,"# Effective runtime configuration for manual restore",...keys.filter(key=>env[key]!==undefined).map(key=>`${key}=${JSON.stringify(env[key])}`)].join("\n");
+}
+
 export type BackupInfo = { id: string; filename: string; size: number; createdAt: string; sha256?: string };
 
 export async function createEncryptedBackup(input: { dataDir: string; passphrase: string; envContents?: string; retentionDays?: number; retentionCount?: number }) {
@@ -134,8 +141,8 @@ export function applyPendingRestore(dataDirInput: string) {
   const targets = ["rehabintl-crm.sqlite", "rehabintl-crm.sqlite-wal", "rehabintl-crm.sqlite-shm", "uploads", ".app-secret", ".env.restore"];
   try {
     for (const name of targets) {
-      const current = path.join(dataDir, name);
-      if (existsSync(current)) { const recovery = path.join(recoveryDir, name); renameSync(current, recovery); moved.push({ from: current, to: recovery }); }
+      const current = path.join(/*turbopackIgnore: true*/ dataDir, name);
+      if (existsSync(/*turbopackIgnore: true*/ current)) { const recovery = path.join(recoveryDir, name); renameSync(current, recovery); moved.push({ from: current, to: recovery }); }
     }
     renameSync(restoredDb, path.join(dataDir, "rehabintl-crm.sqlite"));
     const restoredUploads = path.join(payloadDir, "uploads");
@@ -149,7 +156,7 @@ export function applyPendingRestore(dataDirInput: string) {
     rmSync(stageDir, { recursive: true, force: true });
     return { recoveryDir };
   } catch (error) {
-    for (const name of ["rehabintl-crm.sqlite", "rehabintl-crm.sqlite-wal", "rehabintl-crm.sqlite-shm", "uploads", ".app-secret", ".env.restore"]) rmSync(path.join(dataDir, name), { recursive: true, force: true });
+    for (const name of ["rehabintl-crm.sqlite", "rehabintl-crm.sqlite-wal", "rehabintl-crm.sqlite-shm", "uploads", ".app-secret", ".env.restore"]) rmSync(path.join(/*turbopackIgnore: true*/ dataDir, name), { recursive: true, force: true });
     for (const item of moved.reverse()) if (existsSync(item.to)) renameSync(item.to, item.from);
     throw error;
   }
