@@ -1,6 +1,6 @@
 "use client";
 import { useState, useCallback } from "react";
-type Account = { id: number; name: string; role: string; status: string };
+type Account = { id: number; name: string; role: "admin" | "sales" | "viewer"; status: string };
 export default function CustomerAccess({
   customerId,
   onNotify,
@@ -88,7 +88,9 @@ export default function CustomerAccess({
         .filter((u) => u.id !== access.owner?.id)
         .map((u) => (
           <p key={u.id}>
-            {u.name} · {u.role === "viewer" ? "只读" : "销售"}
+            {u.name} ·{" "}
+            {{ admin: "管理员", sales: "销售", viewer: "只读" }[u.role] ||
+              "未知角色"}
             {u.status !== "active" ? "（已停用）" : ""}{" "}
             <button
               type="button"
@@ -110,7 +112,9 @@ export default function CustomerAccess({
           .filter((u) => u.status === "active")
           .map((u) => (
             <option value={u.id} key={u.id}>
-              {u.name} · {u.role === "viewer" ? "只读" : "业务员"}
+              {u.name} ·{" "}
+              {{ admin: "管理员", sales: "销售", viewer: "只读" }[u.role] ||
+                "未知角色"}
             </option>
           ))}
       </select>
